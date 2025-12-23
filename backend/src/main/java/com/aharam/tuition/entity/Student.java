@@ -15,7 +15,7 @@ public class Student {
 
     @Id
     @Column(unique = true, nullable = false)
-    private String studentId; // Manually entered ID
+    private String studentId; // Manually entered ID, e.g., AHC-1001
 
     @Column(nullable = false)
     private String fullName;
@@ -30,7 +30,7 @@ public class Student {
 
     private String schoolName;
 
-    private String subjects; // Comma separated for now
+    private String subjects; // Comma separated
 
     @Column(columnDefinition = "TEXT")
     private String address;
@@ -42,6 +42,7 @@ public class Student {
 
     private LocalDate admissionDate;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private boolean active = true;
+    private StudentStatus status = StudentStatus.ACTIVE;
 }
