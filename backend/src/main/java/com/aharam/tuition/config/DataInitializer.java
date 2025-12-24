@@ -19,13 +19,21 @@ public class DataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        if (userRepository.count() == 0) {
-            User admin = new User();
-            admin.setUsername("aharam");
-            admin.setPassword(passwordEncoder.encode("pw-20130427"));
-            admin.setRole(Role.SUPER_ADMIN);
-            userRepository.save(admin);
-            System.out.println("Default Super Admin User created: username=aharam, password=pw-20130427");
+        User admin;
+        if (userRepository.existsByUsername("aharam")) {
+            User existing = userRepository.findByUsername("aharam").orElseThrow();
+            userRepository.delete(existing);
+            System.out.println("Deleted existing Super Admin 'aharam' to ensure clean state.");
         }
+
+        admin = new User();
+        admin.setUsername("aharam");
+        System.out.println("Creating new Super Admin 'aharam'.");
+
+        admin.setPassword(passwordEncoder.encode("20130427"));
+        admin.setRole(Role.SUPER_ADMIN);
+        userRepository.save(admin);
+
+        System.out.println("Super Admin credentials confirmed: username=aharam, password=20130427");
     }
 }

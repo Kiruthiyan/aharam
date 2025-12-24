@@ -23,7 +23,6 @@ public class AdminController {
     PasswordEncoder encoder;
 
     @PostMapping("/staff/register")
-    // @PreAuthorize("hasRole('SUPER_ADMIN')") // TODO: Enable security
     public ResponseEntity<?> registerStaff(@RequestBody SignupRequest signUpRequest) {
         if (userRepository.existsByUsername(signUpRequest.getUsername())) {
             return ResponseEntity
@@ -34,12 +33,8 @@ public class AdminController {
         // Create new user's account
         User user = new User();
         user.setUsername(signUpRequest.getUsername());
-        user.setPassword(encoder.encode(signUpRequest.getPassword())); // Temp password provided by Super Admin
+        user.setPassword(encoder.encode(signUpRequest.getPassword()));
         user.setRole(Role.STAFF_ADMIN);
-
-        // We might want to store extra details like Full Name, Phone in a Staff Profile
-        // entity later
-        // For now, storing basic User info
 
         userRepository.save(user);
 
@@ -47,7 +42,6 @@ public class AdminController {
     }
 
     @GetMapping("/staff")
-    // @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<List<User>> getAllStaff() {
         List<User> staff = userRepository.findAll().stream()
                 .filter(user -> user.getRole() == Role.STAFF_ADMIN)

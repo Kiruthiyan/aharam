@@ -6,10 +6,7 @@ import { useState, useEffect } from "react";
 
 // Parent Fees View
 function ParentFeesView() {
-    const fees = [
-        { id: "F-1001", month: "December 2024", amount: "Rs. 2,500", date: "2024-12-01", status: "Paid" },
-        { id: "F-1002", month: "January 2025", amount: "Rs. 2,500", date: "-", status: "Pending" },
-    ];
+    const fees: any[] = []; // TODO: Fetch from API
 
     return (
         <div className="max-w-5xl">
@@ -64,10 +61,7 @@ function ParentFeesView() {
 
 // Staff/Admin Fees View
 function StaffFeesView() {
-    const fees = [
-        { id: "F-1001", student: "Kavin Kumar", amount: "Rs. 2,500", date: "2024-12-01", status: "Paid" },
-        { id: "F-1002", student: "Ravi Shankar", amount: "Rs. 2,500", date: "2024-12-05", status: "Pending" },
-    ];
+    const fees: any[] = []; // TODO: Fetch from API
 
     return (
         <div>

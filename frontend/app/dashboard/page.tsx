@@ -41,13 +41,13 @@ export default function Dashboard() {
     const staffAdminStats = [
         { label: "எனது மாணவர்கள் (Assigned)", value: stats.assignedStudents, icon: Users, color: "bg-blue-500" },
         { label: "இன்றைய வரவு (Present)", value: stats.todaysAttendance, icon: Calendar, color: "bg-emerald-500" },
-        { label: "நிலுவை உள்ளவர்கள் (Pending Fees)", value: "12", icon: Clock, color: "bg-orange-500" },
+        { label: "நிலுவை உள்ளவர்கள் (Pending Fees)", value: stats.pendingFees, icon: Clock, color: "bg-orange-500" },
     ];
 
     const parentStats = [
-        { label: "வருகை பதிவு (Attendance)", value: "92%", icon: Calendar, color: "bg-emerald-500" },
-        { label: "கல்வித் தரம் (Marks Avg)", value: "85%", icon: GraduationCap, color: "bg-blue-500" },
-        { label: "கட்டண நிலை (Fee Status)", value: "Paid", icon: CreditCard, color: "bg-green-500" }, // Dynamic later
+        { label: "வருகை பதிவு (Attendance)", value: "-", icon: Calendar, color: "bg-emerald-500" },
+        { label: "கல்வித் தரம் (Marks Avg)", value: "-", icon: GraduationCap, color: "bg-blue-500" },
+        { label: "கட்டண நிலை (Fee Status)", value: "-", icon: CreditCard, color: "bg-green-500" }, // Dynamic later
     ];
 
     let currentStats = superAdminStats;
@@ -77,15 +77,8 @@ export default function Dashboard() {
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                     <h3 className="text-lg font-bold text-gray-900 mb-4">சமீபத்திய அறிவிப்புகள் (Recent Notices)</h3>
                     <div className="space-y-4">
-                        {[1, 2, 3].map((i) => (
-                            <div key={i} className="flex items-start border-b border-gray-50 pb-4 last:border-0 last:pb-0">
-                                <div className="h-2 w-2 mt-2 rounded-full bg-emerald-500 mr-3"></div>
-                                <div>
-                                    <p className="text-sm font-medium text-gray-800">பரீட்சை முடிவுகள் வெளியிடப்பட்டுள்ளன</p>
-                                    <p className="text-xs text-gray-400 mt-1">2 hours ago</p>
-                                </div>
-                            </div>
-                        ))}
+                        {/* TODO: Fetch real notices from API */}
+                        <div className="text-gray-500 text-sm text-center py-4">No recent notices.</div>
                     </div>
                 </div>
 
@@ -111,9 +104,9 @@ export default function Dashboard() {
                                 K
                             </div>
                             <div>
-                                <p className="font-bold text-gray-900">Kavin Kumar</p>
-                                <p className="text-sm text-gray-500">Grade 10 - Mathematics</p>
-                                <span className="inline-block mt-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-lg">Active Student</span>
+                                <p className="font-bold text-gray-900">Student Name</p>
+                                <p className="text-sm text-gray-500">Grade - Section</p>
+                                <span className="inline-block mt-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-lg">Status</span>
                             </div>
                         </div>
                     </div>

@@ -1,12 +1,11 @@
 package com.aharam.tuition.controller;
 
 import com.aharam.tuition.entity.Role;
+import com.aharam.tuition.entity.User;
 import com.aharam.tuition.repository.StudentRepository;
 import com.aharam.tuition.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,9 +27,8 @@ public class DashboardController {
 
     @GetMapping("/stats")
     public ResponseEntity<?> getStats() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        boolean isSuperAdmin = auth.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+        // Disabled Security Logic for Debugging
+        boolean isSuperAdmin = false;
 
         Map<String, Object> stats = new HashMap<>();
 
@@ -45,10 +43,8 @@ public class DashboardController {
             stats.put("pendingFees", 45); // Mock
         } else {
             // Staff Admin View
-            // Should theoretically filter assigned students, here strict Financials hidden
             stats.put("assignedStudents", 120); // Mock
             stats.put("todaysAttendance", 480); // Mock
-            // NO monthlyIncome
         }
 
         return ResponseEntity.ok(stats);

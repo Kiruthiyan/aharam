@@ -10,11 +10,7 @@ function ParentAttendanceView() {
     const studentName = "Kavin Kumar"; // TODO: Fetch from Context/API
     const [month, setMonth] = useState("December 2024");
 
-    const attendanceRecords = [
-        { date: "2024-12-01", status: "Present" },
-        { date: "2024-12-02", status: "Present" },
-        { date: "2024-12-03", status: "Absent" },
-    ];
+    const attendanceRecords: any[] = []; // TODO: Fetch from API
 
     return (
         <div className="max-w-4xl">
@@ -53,11 +49,7 @@ function ParentAttendanceView() {
 // Staff/Admin View Component
 function StaffAttendanceView() {
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
-    const [students] = useState([
-        { id: "STD-001", name: "Kavin Kumar", status: "Present" },
-        { id: "STD-002", name: "Ravi Shankar", status: "Absent" },
-        { id: "STD-003", name: "Meena Kumari", status: "Present" },
-    ]);
+    const [students] = useState<any[]>([]); // TODO: Fetch from API
 
     return (
         <div>

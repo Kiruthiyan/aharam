@@ -37,19 +37,23 @@ public class AuthController {
 
     @PostMapping("/signin")
     public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
+        try {
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
 
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-        String jwt = jwtUtils.generateJwtToken(authentication);
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            String jwt = jwtUtils.generateJwtToken(authentication);
 
-        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-        String role = userDetails.getAuthorities().stream().findFirst().get().getAuthority();
+            UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+            String role = userDetails.getAuthorities().stream().findFirst().get().getAuthority();
 
-        return ResponseEntity.ok(new JwtResponse(jwt,
-                0L, // Placeholder ID or fetch actual ID if needed
-                userDetails.getUsername(),
-                role));
+            return ResponseEntity.ok(new JwtResponse(jwt,
+                    0L,
+                    userDetails.getUsername(),
+                    role));
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body("Login failed: " + e.getMessage());
+        }
     }
 
     @PostMapping("/signup") // For testing/initial setup only, or Super Admin use
@@ -70,7 +74,6 @@ public class AuthController {
         } else if ("staff".equalsIgnoreCase(roleStr)) {
             user.setRole(Role.STAFF_ADMIN);
         } else {
-            user.setRole(Role.PARENT);
         }
 
         userRepository.save(user);
