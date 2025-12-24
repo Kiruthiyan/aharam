@@ -21,11 +21,11 @@ public class DataInitializer implements CommandLineRunner {
     public void run(String... args) throws Exception {
         if (userRepository.count() == 0) {
             User admin = new User();
-            admin.setUsername("admin");
-            admin.setPassword(passwordEncoder.encode("password"));
+            admin.setUsername("aharam");
+            admin.setPassword(passwordEncoder.encode("pw-20130427"));
             admin.setRole(Role.SUPER_ADMIN);
             userRepository.save(admin);
-            System.out.println("Default Admin User created: username=admin, password=password");
+            System.out.println("Default Super Admin User created: username=aharam, password=pw-20130427");
         }
     }
 }

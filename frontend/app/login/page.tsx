@@ -4,11 +4,12 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, User, Lock, ArrowLeft } from "lucide-react";
+import { Loader2, User, Lock, ArrowLeft, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [formData, setFormData] = useState({
         username: "",
         password: "",
@@ -17,18 +18,33 @@ export default function LoginPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
+        setError(null);
 
-        // Simulate network delay
-        setTimeout(() => {
-            // Simple client-side validation for demo (in reality, call API)
-            if (formData.username && formData.password) {
-                setLoading(false);
+        try {
+            const res = await fetch("http://localhost:8080/api/auth/signin", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(formData)
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                // Store Auth Data
+                localStorage.setItem("token", data.token);
+                localStorage.setItem("userRole", data.roles[0]); // Assumes single role
+                localStorage.setItem("username", data.username);
+                localStorage.setItem("userId", data.id);
+
+                // Redirect based on Role (Currently all go to dashboard, but components render differently)
                 router.push("/dashboard");
             } else {
-                setLoading(false);
-                alert("Please enter credentials");
+                setError("Login failed. Please check your credentials.");
             }
-        }, 1500);
+        } catch (err) {
+            setError("Network Error: Could not connect to server.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -79,6 +95,13 @@ export default function LoginPage() {
                     <div className="bg-white py-8">
                         <form className="space-y-6" onSubmit={handleSubmit}>
 
+                            {error && (
+                                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg flex items-center">
+                                    <AlertCircle className="h-4 w-4 mr-2" />
+                                    {error}
+                                </div>
+                            )}
+
                             {/* Username */}
                             <div>
                                 <label htmlFor="username" className="block text-sm font-medium text-gray-700">
@@ -93,7 +116,7 @@ export default function LoginPage() {
                                         name="username"
                                         type="text"
                                         required
-                                        className="focus:ring-emerald-500 focus:border-emerald-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-lg py-3 transition-colors"
+                                        className="focus:ring-emerald-500 focus:border-emerald-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-lg py-3 transition-colors outline-none"
                                         placeholder="Enter your ID"
                                         value={formData.username}
                                         onChange={(e) => setFormData({ ...formData, username: e.target.value })}
@@ -115,7 +138,7 @@ export default function LoginPage() {
                                         name="password"
                                         type="password"
                                         required
-                                        className="focus:ring-emerald-500 focus:border-emerald-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-lg py-3 transition-colors"
+                                        className="focus:ring-emerald-500 focus:border-emerald-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-lg py-3 transition-colors outline-none"
                                         placeholder="••••••••"
                                         value={formData.password}
                                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}

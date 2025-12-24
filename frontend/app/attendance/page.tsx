@@ -1,21 +1,66 @@
 "use client";
 
 import AdminLayout from "@/components/AdminLayout";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Calendar, CheckCircle, XCircle, Search } from "lucide-react";
 import clsx from "clsx";
 
-export default function AttendancePage() {
+// Parent View Component
+function ParentAttendanceView() {
+    const studentName = "Kavin Kumar"; // TODO: Fetch from Context/API
+    const [month, setMonth] = useState("December 2024");
+
+    const attendanceRecords = [
+        { date: "2024-12-01", status: "Present" },
+        { date: "2024-12-02", status: "Present" },
+        { date: "2024-12-03", status: "Absent" },
+    ];
+
+    return (
+        <div className="max-w-4xl">
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">எனது வருகை (My Attendance)</h1>
+                    <p className="text-sm text-gray-500">Student: {studentName}</p>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
+                    {attendanceRecords.map((record, idx) => (
+                        <div key={idx} className={clsx(
+                            "flex items-center justify-between p-4 rounded-xl border transition-all hover:shadow-md",
+                            record.status === 'Present' ? "bg-green-50 border-green-100" : "bg-red-50 border-red-100"
+                        )}>
+                            <div className="flex items-center">
+                                <Calendar className={clsx("h-5 w-5 mr-3", record.status === 'Present' ? "text-green-600" : "text-red-500")} />
+                                <span className="font-semibold text-gray-700">{record.date}</span>
+                            </div>
+                            <span className={clsx(
+                                "px-2 py-1 rounded-md text-xs font-bold uppercase",
+                                record.status === 'Present' ? "bg-green-200 text-green-800" : "bg-red-200 text-red-800"
+                            )}>
+                                {record.status}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// Staff/Admin View Component
+function StaffAttendanceView() {
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
     const [students] = useState([
         { id: "STD-001", name: "Kavin Kumar", status: "Present" },
         { id: "STD-002", name: "Ravi Shankar", status: "Absent" },
         { id: "STD-003", name: "Meena Kumari", status: "Present" },
-        { id: "STD-004", name: "Suresh Ra", status: "Present" },
     ]);
 
     return (
-        <AdminLayout userRole="STAFF_ADMIN">
+        <div>
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">மாணவர் வருகை (Attendance)</h1>
@@ -67,10 +112,10 @@ export default function AttendancePage() {
                                         </span>
                                     </td>
                                     <td className="p-4 text-right space-x-2">
-                                        <button className="p-1 rounded-full hover:bg-green-100 text-gray-400 hover:text-green-600 transition-colors" title="Mark Present">
+                                        <button className="p-1 rounded-full hover:bg-green-100 text-gray-400 hover:text-green-600 transition-colors">
                                             <CheckCircle className="h-5 w-5" />
                                         </button>
-                                        <button className="p-1 rounded-full hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors" title="Mark Absent">
+                                        <button className="p-1 rounded-full hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors">
                                             <XCircle className="h-5 w-5" />
                                         </button>
                                     </td>
@@ -80,6 +125,21 @@ export default function AttendancePage() {
                     </table>
                 </div>
             </div>
+        </div>
+    );
+}
+
+export default function AttendancePage() {
+    const [userRole, setUserRole] = useState<"SUPER_ADMIN" | "STAFF_ADMIN" | "PARENT">("STAFF_ADMIN");
+
+    useEffect(() => {
+        const storedRole = localStorage.getItem("userRole");
+        if (storedRole) setUserRole(storedRole as any);
+    }, []);
+
+    return (
+        <AdminLayout userRole={userRole}>
+            {userRole === "PARENT" ? <ParentAttendanceView /> : <StaffAttendanceView />}
         </AdminLayout>
     );
 }

@@ -56,6 +56,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/public/**").permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("SUPER_ADMIN") // Strict Super Admin Access
+                        .requestMatchers("/api/students/register").hasAnyRole("SUPER_ADMIN", "STAFF_ADMIN")
                         .anyRequest().authenticated());
 
         http.authenticationProvider(authenticationProvider());
