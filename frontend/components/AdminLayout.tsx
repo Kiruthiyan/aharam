@@ -21,24 +21,24 @@ import clsx from "clsx";
 
 interface AdminLayoutProps {
     children: React.ReactNode;
-    userRole?: "SUPER_ADMIN" | "STAFF_ADMIN" | "PARENT"; // Configurable for testing
+    userRole?: "ADMIN" | "STAFF" | "PARENT"; // Configurable for testing
 }
 
-export default function AdminLayout({ children, userRole = "SUPER_ADMIN" }: AdminLayoutProps) {
+export default function AdminLayout({ children, userRole = "ADMIN" }: AdminLayoutProps) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const pathname = usePathname();
 
     // Define navigation based on full requirements
     const allNavigation = [
-        { name: 'முகப்பு (Overview)', href: '/dashboard', icon: LayoutDashboard, roles: ["SUPER_ADMIN", "STAFF_ADMIN", "PARENT"] },
-        { name: 'மாணவர்கள் (Students)', href: '/students', icon: Users, roles: ["SUPER_ADMIN", "STAFF_ADMIN"] },
-        { name: 'பதிவு (Registration)', href: '/students/register', icon: GraduationCap, roles: ["SUPER_ADMIN", "STAFF_ADMIN"] },
-        { name: 'வரவு (Attendance)', href: '/attendance', icon: Calendar, roles: ["SUPER_ADMIN", "STAFF_ADMIN", "PARENT"] },
-        { name: 'பரிக்ஷை (Academic)', href: '/marks', icon: BookOpen, roles: ["SUPER_ADMIN", "STAFF_ADMIN", "PARENT"] },
-        { name: 'கட்டணம் (Fees)', href: '/fees', icon: CreditCard, roles: ["SUPER_ADMIN", "STAFF_ADMIN", "PARENT"] },
-        // Super Admin Only
-        { name: 'நிர்வாகிகள் (Staff)', href: '/staff', icon: Users, roles: ["SUPER_ADMIN"] },
-        { name: 'அறிக்கைகள் (Reports)', href: '/reports', icon: BookOpen, roles: ["SUPER_ADMIN"] },
+        { name: 'முகப்பு (Overview)', href: '/dashboard', icon: LayoutDashboard, roles: ["ADMIN", "STAFF", "PARENT"] },
+        { name: 'மாணவர்கள் (Students)', href: '/students', icon: Users, roles: ["ADMIN", "STAFF"] },
+        { name: 'பதிவு (Registration)', href: '/students/register', icon: GraduationCap, roles: ["ADMIN", "STAFF"] },
+        { name: 'வரவு (Attendance)', href: '/attendance', icon: Calendar, roles: ["ADMIN", "STAFF", "PARENT"] },
+        { name: 'பரிக்ஷை (Academic)', href: '/marks', icon: BookOpen, roles: ["ADMIN", "STAFF", "PARENT"] },
+        { name: 'கட்டணம் (Fees)', href: '/fees', icon: CreditCard, roles: ["ADMIN", "STAFF", "PARENT"] },
+        // Admin Only
+        { name: 'நிர்வாகிகள் (Staff)', href: '/staff', icon: Users, roles: ["ADMIN"] },
+        { name: 'அறிக்கைகள் (Reports)', href: '/reports', icon: BookOpen, roles: ["ADMIN"] },
     ];
 
     const navigation = allNavigation.filter(item => item.roles.includes(userRole));
@@ -105,12 +105,17 @@ export default function AdminLayout({ children, userRole = "SUPER_ADMIN" }: Admi
                         </div>
                         <div className="overflow-hidden">
                             <p className="text-sm font-medium text-white truncate">Admin User</p>
-                            <p className="text-xs text-emerald-400 truncate">{userRole.replace('_', ' ')}</p>
+                            <p className="text-xs text-emerald-400 truncate">ADMIN</p>
                         </div>
                     </div>
                     <Link
                         href="/login"
                         className="flex items-center w-full px-4 py-2 text-sm font-medium text-emerald-200 bg-emerald-900/50 rounded-lg hover:bg-red-900/20 hover:text-red-300 transition-colors"
+                        onClick={() => {
+                            localStorage.removeItem("token");
+                            localStorage.removeItem("userRole");
+                            localStorage.removeItem("username");
+                        }}
                     >
                         <LogOut className="mr-3 h-4 w-4" />
                         வெளியேற (Logout)
@@ -130,8 +135,7 @@ export default function AdminLayout({ children, userRole = "SUPER_ADMIN" }: Admi
                             <Menu className="h-6 w-6" />
                         </button>
                         <h1 className="text-2xl font-bold text-emerald-950 ml-2 md:ml-0">
-                            {/* Dynamic Header could go here */}
-                            வணக்கம், Admin 👋
+                            வணக்கம், Admin User 👋
                         </h1>
                     </div>
 
@@ -140,9 +144,9 @@ export default function AdminLayout({ children, userRole = "SUPER_ADMIN" }: Admi
                             <Bell className="h-6 w-6" />
                             <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 border border-white"></span>
                         </button>
-                        <button className="p-2 rounded-full text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors">
+                        <Link href="/settings" className="p-2 rounded-full text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors">
                             <Settings className="h-6 w-6" />
-                        </button>
+                        </Link>
                     </div>
                 </header>
 

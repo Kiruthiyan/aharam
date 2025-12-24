@@ -11,4 +11,5 @@ public class JwtResponse {
     private Long id;
     private String username;
     private String role;
+    private boolean requirePasswordChange;
 }

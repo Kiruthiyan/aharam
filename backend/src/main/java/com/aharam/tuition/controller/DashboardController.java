@@ -37,7 +37,7 @@ public class DashboardController {
 
         if (isSuperAdmin) {
             // Super Admin Only Stats
-            long totalStaff = userRepository.findAll().stream().filter(u -> u.getRole() == Role.STAFF_ADMIN).count();
+            long totalStaff = userRepository.findAll().stream().filter(u -> u.getRole() == Role.STAFF).count();
             stats.put("totalStaff", totalStaff);
             stats.put("monthlyIncome", 245000); // Mock
             stats.put("pendingFees", 45); // Mock

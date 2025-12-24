@@ -53,4 +53,8 @@ public class StudentService {
     public boolean isStudentIdTaken(String studentId) {
         return studentRepository.existsById(studentId);
     }
+
+    public java.util.List<Student> getAllStudents() {
+        return studentRepository.findAll();
+    }
 }

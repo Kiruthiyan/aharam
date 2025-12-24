@@ -29,19 +29,22 @@ export default function LoginPage() {
 
             if (res.ok) {
                 const data = await res.json();
-                // Store Auth Data
                 localStorage.setItem("token", data.token);
-                localStorage.setItem("userRole", data.roles[0]); // Assumes single role
+                localStorage.setItem("userRole", data.role);
                 localStorage.setItem("username", data.username);
                 localStorage.setItem("userId", data.id);
 
-                // Redirect based on Role (Currently all go to dashboard, but components render differently)
-                router.push("/dashboard");
+                if (data.requirePasswordChange) {
+                    localStorage.setItem("requirePasswordChange", "true");
+                }
+
+                // Force navigation to ensure state refresh
+                window.location.href = "/dashboard";
             } else {
-                setError("Login failed. Please check your credentials.");
+                setError(res.status === 401 ? "தவறான பயனர் பெயர் அல்லது கடவுச்சொல் (Invalid Credentials)" : "Server Error");
             }
         } catch (err) {
-            setError("Network Error: Could not connect to server.");
+            setError("இணையத் தொடர்பு இல்லை (Network Error)");
         } finally {
             setLoading(false);
         }
@@ -104,10 +107,10 @@ export default function LoginPage() {
 
                             {/* Username */}
                             <div>
-                                <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
                                     பயனர் பெயர் (User ID)
                                 </label>
-                                <div className="mt-2 relative rounded-md shadow-sm">
+                                <div className="relative rounded-lg shadow-sm">
                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                         <User className="h-5 w-5 text-gray-400" aria-hidden="true" />
                                     </div>
@@ -116,7 +119,7 @@ export default function LoginPage() {
                                         name="username"
                                         type="text"
                                         required
-                                        className="focus:ring-emerald-500 focus:border-emerald-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-lg py-3 transition-colors outline-none"
+                                        className="focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-lg py-3 transition-all outline-none bg-gray-50 hover:bg-white"
                                         placeholder="Enter your ID"
                                         value={formData.username}
                                         onChange={(e) => setFormData({ ...formData, username: e.target.value })}
@@ -126,10 +129,10 @@ export default function LoginPage() {
 
                             {/* Password */}
                             <div>
-                                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
                                     கடவுச்சொல் (Password)
                                 </label>
-                                <div className="mt-2 relative rounded-md shadow-sm">
+                                <div className="relative rounded-lg shadow-sm">
                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                         <Lock className="h-5 w-5 text-gray-400" aria-hidden="true" />
                                     </div>
@@ -138,7 +141,7 @@ export default function LoginPage() {
                                         name="password"
                                         type="password"
                                         required
-                                        className="focus:ring-emerald-500 focus:border-emerald-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-lg py-3 transition-colors outline-none"
+                                        className="focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-lg py-3 transition-all outline-none bg-gray-50 hover:bg-white"
                                         placeholder="••••••••"
                                         value={formData.password}
                                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -152,14 +155,14 @@ export default function LoginPage() {
                                         id="remember-me"
                                         name="remember-me"
                                         type="checkbox"
-                                        className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded"
+                                        className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded cursor-pointer"
                                     />
-                                    <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+                                    <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900 cursor-pointer">
                                         என்னை நினைவில் கொள்
                                     </label>
                                 </div>
                                 <div className="text-sm">
-                                    <a href="#" className="font-medium text-emerald-600 hover:text-emerald-500">
+                                    <a href="#" className="font-medium text-emerald-600 hover:text-emerald-500 transition-colors">
                                         கடவுச்சொல்லை மறந்தீர்களா?
                                     </a>
                                 </div>
@@ -169,7 +172,7 @@ export default function LoginPage() {
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 transition-all duration-200 transform hover:scale-[1.01]"
+                                    className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-lg shadow-lg text-sm font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:-translate-y-0.5"
                                 >
                                     {loading ? (
                                         <>
@@ -177,7 +180,7 @@ export default function LoginPage() {
                                             உள்நுழைகிறது...
                                         </>
                                     ) : (
-                                        "உள்நுழைய (Sign in)"
+                                        "உள்நுழைய (Sign In)"
                                     )}
                                 </button>
                             </div>

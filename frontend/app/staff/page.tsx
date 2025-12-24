@@ -89,14 +89,14 @@ export default function StaffPage() {
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">நிர்வாகிகள் (Staff Management)</h1>
-                    <p className="text-sm text-gray-500">Manage Staff Admins and their access.</p>
+                    <p className="text-sm text-gray-500">ஆசிரியர்கள் மற்றும் நிர்வாகிகளை நிர்வகிக்கவும்.</p>
                 </div>
                 <button
                     onClick={() => setShowModal(true)}
-                    className="bg-emerald-600 text-white px-6 py-2 rounded-lg hover:bg-emerald-700 transition-colors shadow-lg flex items-center"
+                    className="bg-emerald-600 text-white px-6 py-2 rounded-lg hover:bg-emerald-700 transition-colors shadow-lg flex items-center font-medium"
                 >
                     <UserPlus className="h-4 w-4 mr-2" />
-                    Add New Staff
+                    புதியவர் சேர்க்க (Add New)
                 </button>
             </div>
 
@@ -118,7 +118,7 @@ export default function StaffPage() {
                                     onClick={() => handleRemove(staff.id)}
                                     className="text-gray-400 hover:text-red-500 transition-colors text-sm flex items-center"
                                 >
-                                    <Trash2 className="h-4 w-4 mr-1" /> Remove
+                                    <Trash2 className="h-4 w-4 mr-1" /> நீக்க (Remove)
                                 </button>
                                 <span className="text-xs text-green-600 font-medium">Active</span>
                             </div>
@@ -137,7 +137,7 @@ export default function StaffPage() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
                         <div className="p-6 border-b border-gray-100 bg-emerald-50">
-                            <h2 className="text-lg font-bold text-emerald-900">Add New Staff Admin</h2>
+                            <h2 className="text-lg font-bold text-emerald-900">புதிய நிர்வாகியை சேர்த்தல் (Add Staff)</h2>
                         </div>
                         <form onSubmit={handleRegister} className="p-6 space-y-4">
                             {error && (
@@ -147,7 +147,7 @@ export default function StaffPage() {
                             )}
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">முழு பெயர் (Full Name)</label>
                                 <input
                                     type="text"
                                     value={formData.fullName}
@@ -159,7 +159,7 @@ export default function StaffPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Email (Username)</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">மின்னஞ்சல் (Email/Username)</label>
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                                     <input
@@ -174,7 +174,7 @@ export default function StaffPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">தொலைபேசி (Phone)</label>
                                 <div className="relative">
                                     <Phone className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                                     <input
@@ -189,13 +189,13 @@ export default function StaffPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Temporary Password</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">தற்காலிக கடவுச்சொல் (Temp Password)</label>
                                 <input
                                     type="text"
                                     value={formData.password}
                                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-gray-50"
-                                    placeholder="Generate or enter password"
+                                    placeholder="Enter password"
                                     required
                                 />
                             </div>
@@ -206,14 +206,14 @@ export default function StaffPage() {
                                     onClick={() => setShowModal(false)}
                                     className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                                 >
-                                    Cancel
+                                    ரத்து (Cancel)
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={submitLoading}
-                                    className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center justify-center"
+                                    className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center justify-center font-medium"
                                 >
-                                    {submitLoading ? <Loader2 className="animate-spin h-4 w-4" /> : "Create Staff"}
+                                    {submitLoading ? <Loader2 className="animate-spin h-4 w-4" /> : "சேர்க்க (Create)"}
                                 </button>
                             </div>
                         </form>

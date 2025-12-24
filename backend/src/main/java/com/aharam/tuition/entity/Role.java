@@ -1,7 +1,7 @@
 package com.aharam.tuition.entity;
 
 public enum Role {
-    SUPER_ADMIN,
-    STAFF_ADMIN,
+    ADMIN,
+    STAFF, // Renaming STAFF_ADMIN to STAFF for cleaner naming as requested
     PARENT
 }

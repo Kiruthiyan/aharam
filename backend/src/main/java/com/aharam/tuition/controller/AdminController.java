@@ -34,7 +34,7 @@ public class AdminController {
         User user = new User();
         user.setUsername(signUpRequest.getUsername());
         user.setPassword(encoder.encode(signUpRequest.getPassword()));
-        user.setRole(Role.STAFF_ADMIN);
+        user.setRole(Role.STAFF);
 
         userRepository.save(user);
 
@@ -44,7 +44,7 @@ public class AdminController {
     @GetMapping("/staff")
     public ResponseEntity<List<User>> getAllStaff() {
         List<User> staff = userRepository.findAll().stream()
-                .filter(user -> user.getRole() == Role.STAFF_ADMIN)
+                .filter(user -> user.getRole() == Role.STAFF)
                 .toList();
         return ResponseEntity.ok(staff);
     }

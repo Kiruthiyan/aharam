@@ -31,4 +31,9 @@ public class StudentController {
     public ResponseEntity<?> checkId(@PathVariable String id) {
         return ResponseEntity.ok(studentService.isStudentIdTaken(id));
     }
+
+    @GetMapping
+    public ResponseEntity<?> getAllStudents() {
+        return ResponseEntity.ok(studentService.getAllStudents());
+    }
 }
