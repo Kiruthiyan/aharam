@@ -8,6 +8,8 @@ import com.aharam.tuition.dto.ChangePasswordRequest;
 import com.aharam.tuition.entity.Role;
 import com.aharam.tuition.entity.User;
 import com.aharam.tuition.repository.UserRepository;
+import com.aharam.tuition.repository.StudentRepository;
+import com.aharam.tuition.entity.Student;
 import com.aharam.tuition.security.JwtUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -31,6 +33,9 @@ public class AuthController {
 
     @Autowired
     UserRepository userRepository;
+
+    @Autowired
+    StudentRepository studentRepository;
 
     @Autowired
     PasswordEncoder passwordEncoder;
@@ -90,11 +95,21 @@ public class AuthController {
                 userRepository.save(user);
             }
 
+            // Determine Display Name
+            String displayName = user.getUsername();
+            if (user.getRole() == Role.PARENT) {
+                Student student = studentRepository.findById(user.getUsername()).orElse(null);
+                if (student != null) {
+                    displayName = student.getFullName();
+                }
+            }
+
             // 4. Return Response
             return ResponseEntity.ok(new JwtResponse(
                     jwt,
                     user.getId(),
                     user.getUsername(),
+                    displayName,
                     user.getRole().name(),
                     user.isFirstLogin()));
 

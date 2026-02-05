@@ -30,6 +30,19 @@ public class Student {
 
     private String schoolName;
 
+    // Derived from ID logic: KT2026xxx
+    // Center: K (Kokuvil) / M (Mallakam)
+    @Column(nullable = false)
+    private String center;
+
+    // Medium: T (Tamil) / E (English)
+    @Column(nullable = false)
+    private String medium;
+
+    // Exam Year: 2026, 2027...
+    @Column(nullable = false)
+    private Integer examBatch;
+
     private String subjects; // Comma separated
 
     @Column(columnDefinition = "TEXT")

@@ -21,6 +21,10 @@ export default function StudentsPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [role, setRole] = useState<"ADMIN" | "STAFF" | "PARENT">("ADMIN");
 
+    const [selectedBatch, setSelectedBatch] = useState("ALL");
+    const [selectedCenter, setSelectedCenter] = useState("ALL");
+    const [selectedMedium, setSelectedMedium] = useState("ALL");
+
     useEffect(() => {
         const storedRole = localStorage.getItem("userRole");
         if (storedRole) setRole(storedRole as any);
@@ -45,10 +49,21 @@ export default function StudentsPage() {
         fetchStudents();
     }, []);
 
-    const filteredStudents = students.filter(student =>
-        student.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.studentId?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredStudents = students.filter(student => {
+        const matchesSearch = student.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            student.studentId?.toLowerCase().includes(searchTerm.toLowerCase());
+
+        // Safe access to new fields (they might be missing in old data)
+        const sBatch = (student as any).examBatch ? (student as any).examBatch.toString() : "";
+        const sCenter = (student as any).center || "";
+        const sMedium = (student as any).medium || "";
+
+        const matchesBatch = selectedBatch === "ALL" || sBatch === selectedBatch;
+        const matchesCenter = selectedCenter === "ALL" || sCenter === selectedCenter;
+        const matchesMedium = selectedMedium === "ALL" || sMedium === selectedMedium;
+
+        return matchesSearch && matchesBatch && matchesCenter && matchesMedium;
+    });
 
     return (
         <AdminLayout userRole={role}>
@@ -71,8 +86,8 @@ export default function StudentsPage() {
             </div>
 
             {/* Controls Bar */}
-            <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
-                <div className="relative w-full md:w-96">
+            <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6 flex flex-col xl:flex-row gap-4 items-center justify-between">
+                <div className="relative w-full xl:w-96">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                     <input
                         type="text"
@@ -82,14 +97,24 @@ export default function StudentsPage() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="flex items-center gap-2 w-full md:w-auto">
-                    <button className="flex items-center justify-center px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors flex-1 md:flex-none">
-                        <Filter className="h-4 w-4 mr-2" />
-                        Filter
-                    </button>
-                    <button className="flex items-center justify-center px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors flex-1 md:flex-none">
-                        <FileText className="h-4 w-4 mr-2" />
-                        Export
+
+                {/* Filters */}
+                <div className="flex flex-wrap gap-2 w-full xl:w-auto">
+                    <select value={selectedBatch} onChange={e => setSelectedBatch(e.target.value)} className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500">
+                        <option value="ALL">All Batches</option>
+                        <option value="2024">2024</option> <option value="2025">2025</option> <option value="2026">2026</option> <option value="2027">2027</option>
+                    </select>
+                    <select value={selectedCenter} onChange={e => setSelectedCenter(e.target.value)} className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500">
+                        <option value="ALL">All Centers</option>
+                        <option value="KOKUVIL">Kokuvil</option> <option value="MALLAKAM">Mallakam</option>
+                    </select>
+                    <select value={selectedMedium} onChange={e => setSelectedMedium(e.target.value)} className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500">
+                        <option value="ALL">All Mediums</option>
+                        <option value="TAMIL">Tamil</option> <option value="ENGLISH">English</option>
+                    </select>
+
+                    <button className="flex items-center justify-center px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
+                        <FileText className="h-4 w-4 mr-2" /> Export
                     </button>
                 </div>
             </div>
@@ -102,8 +127,8 @@ export default function StudentsPage() {
                             <tr className="bg-gray-50 border-b border-gray-100">
                                 <th className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">ID</th>
                                 <th className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Student Name</th>
+                                <th className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Batch Info</th>
                                 <th className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Parent/Guardian</th>
-                                <th className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">School</th>
                                 <th className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                                 <th className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Actions</th>
                             </tr>
@@ -118,7 +143,7 @@ export default function StudentsPage() {
                             ) : filteredStudents.length === 0 ? (
                                 <tr>
                                     <td colSpan={6} className="p-8 text-center text-gray-500">
-                                        No students found.
+                                        No students found matching filters.
                                     </td>
                                 </tr>
                             ) : (
@@ -138,12 +163,17 @@ export default function StudentsPage() {
                                             </div>
                                         </td>
                                         <td className="p-4">
+                                            <div className="flex flex-col gap-1 text-xs">
+                                                <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded w-fit font-bold">Batch: {(student as any).examBatch || '-'}</span>
+                                                <span className="text-gray-500">{(student as any).center} / {(student as any).medium}</span>
+                                            </div>
+                                        </td>
+                                        <td className="p-4">
                                             <div className="text-sm">
                                                 <p className="text-gray-900">{student.fatherName}</p>
                                                 <p className="text-gray-400 text-xs">{student.parentPhoneNumber}</p>
                                             </div>
                                         </td>
-                                        <td className="p-4 text-sm text-gray-600">{student.schoolName}</td>
                                         <td className="p-4">
                                             <span className={clsx(
                                                 "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",

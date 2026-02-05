@@ -31,7 +31,8 @@ export default function LoginPage() {
                 const data = await res.json();
                 localStorage.setItem("token", data.token);
                 localStorage.setItem("userRole", data.role);
-                localStorage.setItem("username", data.username);
+                localStorage.setItem("username", data.username); // Store ID
+                localStorage.setItem("name", data.displayName); // Store Name for display
                 localStorage.setItem("userId", data.id);
 
                 if (data.requirePasswordChange) {

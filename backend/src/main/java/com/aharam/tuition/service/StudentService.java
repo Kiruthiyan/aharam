@@ -27,11 +27,18 @@ public class StudentService {
 
     @Transactional
     public Student registerStudent(Student student) throws Exception {
+        // Auto-Generate Student ID
+        String newId = generateStudentId(student.getCenter(), student.getMedium(), student.getExamBatch());
+        student.setStudentId(newId);
+
         if (studentRepository.existsById(student.getStudentId())) {
-            throw new Exception("Student ID already exists!");
+            // Fallback or retry logic if collision, but synchronized/transactional should
+            // handle it
+            // For now, simpler error is fine as volume is low
+            throw new Exception("Error generating ID, please try again.");
         }
 
-        // 1. Save Student Record
+        // ... rest same ...
         student.setAdmissionDate(LocalDate.now());
         student.setStatus(StudentStatus.ACTIVE);
         Student savedStudent = studentRepository.save(student);
@@ -56,5 +63,39 @@ public class StudentService {
 
     public java.util.List<Student> getAllStudents() {
         return studentRepository.findAll();
+    }
+
+    private String generateStudentId(String center, String medium, Integer batch) {
+        String cCode = "K"; // Default Kokuvil
+        if ("MALLAKAM".equalsIgnoreCase(center))
+            cCode = "M";
+
+        String mCode = "T"; // Default Tamil
+        if ("ENGLISH".equalsIgnoreCase(medium))
+            mCode = "E";
+
+        String prefix = cCode + mCode + batch; // e.g., KT2026
+
+        Student lastStudent = studentRepository.findTopByStudentIdStartingWithOrderByStudentIdDesc(prefix);
+
+        int sequence = 1;
+        if (lastStudent != null) {
+            String lastId = lastStudent.getStudentId();
+            // Remove prefix to get sequence
+            // Assuming format KT2026xxx
+            // Prefix length = 1 + 1 + 4 = 6
+            if (lastId.length() > prefix.length()) {
+                try {
+                    String seqStr = lastId.substring(prefix.length());
+                    sequence = Integer.parseInt(seqStr) + 1;
+                } catch (NumberFormatException e) {
+                    // unexpected format, restart from 1? or log?
+                    sequence = 1;
+                }
+            }
+        }
+
+        // Format: Prefix + 3 digit sequence (001, 002...)
+        return prefix + String.format("%03d", sequence);
     }
 }

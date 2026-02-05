@@ -47,9 +47,11 @@ export default function Dashboard() {
 
         // Check local storage for role & password change requirement
         const storedRole = localStorage.getItem("userRole");
-        const storedUser = localStorage.getItem("username");
+        const storedUser = localStorage.getItem("username"); // This is ID now
+        const storedName = localStorage.getItem("name"); // This is Name
         if (storedRole) setUserRole(storedRole as any);
-        if (storedUser) setUsername(storedUser);
+        if (storedName) setUsername(storedName); // Display Name
+        else if (storedUser) setUsername(storedUser); // Fallback to ID
 
         const pwdChange = localStorage.getItem("requirePasswordChange");
         if (pwdChange === "true") setRequirePasswordChange(true);
@@ -143,7 +145,7 @@ export default function Dashboard() {
                                 K
                             </div>
                             <div>
-                                <p className="font-bold text-gray-900">Student Name</p>
+                                <p className="font-bold text-gray-900">{username || "Student Name"}</p>
                                 <p className="text-sm text-gray-500">Grade - Section</p>
                                 <span className="inline-block mt-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-lg">Status</span>
                             </div>
