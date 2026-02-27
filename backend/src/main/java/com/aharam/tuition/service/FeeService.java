@@ -19,6 +19,9 @@ public class FeeService {
     @Autowired
     private StudentRepository studentRepository;
 
+    @Autowired
+    private NotificationService notificationService;
+
     public Fee recordPayment(String studentId, String month, Double amount, String recordedBy) {
         Student student = studentRepository.findById(studentId)
                 .orElseThrow(() -> new RuntimeException("Student not found"));
@@ -31,7 +34,15 @@ public class FeeService {
         fee.setPaidDate(LocalDate.now());
         fee.setRecordedBy(recordedBy);
 
-        return feeRepository.save(fee);
+        Fee saved = feeRepository.save(fee);
+
+        // 🔔 Push notification to parent
+        notificationService.sendToUser(
+                studentId,
+                "💰 Fee Payment Recorded",
+                "Rs." + amount.intValue() + " fee for " + month + " has been recorded. Thank you!");
+
+        return saved;
     }
 
     public List<Fee> getStudentFees(String studentId) {

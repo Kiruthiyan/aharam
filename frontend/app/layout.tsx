@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Noto_Sans_Tamil } from "next/font/google";
 import "./globals.css";
+import { ToastProvider } from "@/components/Toast";
 
 const notoSansTamil = Noto_Sans_Tamil({
   subsets: ["tamil"],
@@ -21,7 +22,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ta" className="h-full">
-      <body className={`${notoSansTamil.className} h-full bg-slate-50 text-slate-900`}>{children}</body>
+      <body className={`${notoSansTamil.className} h-full bg-slate-50 text-slate-900`}>
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   );
 }

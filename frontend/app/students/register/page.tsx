@@ -112,7 +112,7 @@ export default function StudentRegistration() {
     };
 
     return (
-        <AdminLayout userRole="STAFF_ADMIN">
+        <AdminLayout userRole="ADMIN">
             <div className="max-w-5xl mx-auto pb-20">
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">

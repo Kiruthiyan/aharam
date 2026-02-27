@@ -1,0 +1,61 @@
+{
+  "expo": {
+    "name": "Aharam",
+    "slug": "aharam-tuition",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#064e3b"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.aharam.tuition",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Used to scan student QR codes for attendance marking.",
+        "NSUserNotificationsUsageDescription": "Receive attendance and fee notifications."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#064e3b"
+      },
+      "package": "com.aharam.tuition",
+      "permissions": [
+        "CAMERA",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#064e3b",
+          "sounds": []
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Aharam to scan student QR codes."
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "scheme": "aharam",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

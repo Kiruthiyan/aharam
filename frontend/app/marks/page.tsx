@@ -2,8 +2,9 @@
 
 import AdminLayout from "@/components/AdminLayout";
 import { useState, useEffect, useMemo } from "react";
-import { BookOpen, Plus, Search, Trophy, TrendingUp, AlertCircle, Loader2, Save, Filter, ChevronLeft, ChevronRight, GraduationCap, Globe, MapPin, Download } from "lucide-react";
+import { BookOpen, Plus, Search, Trophy, Loader2, Save } from "lucide-react";
 import clsx from "clsx";
+import { useToast } from "@/components/Toast";
 
 // --- Types ---
 interface Mark {
@@ -110,6 +111,7 @@ function ParentMarksView({ username }: { username: string }) {
 
 // --- Staff View (Excel Grid) ---
 function StaffMarksView() {
+    const { toast } = useToast();
     const [students, setStudents] = useState<Student[]>([]);
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -240,8 +242,7 @@ function StaffMarksView() {
             }
         }
 
-        if (payload.length === 0) return;
-        if (!confirm(`Save ${payload.length} marks?`)) return;
+        if (payload.length === 0) { toast("warning", "No marks entered to save."); return; }
 
         setSubmitting(true);
         try {
@@ -251,16 +252,16 @@ function StaffMarksView() {
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
                 body: JSON.stringify(payload)
             });
-            if (res.ok) alert("Marks Saved Successfully!");
-            else alert("Failed to save.");
-        } catch (e) { console.error(e); alert("Network Error"); }
+            if (res.ok) toast("success", `${payload.length} mark(s) saved successfully!`);
+            else toast("error", "Failed to save marks. Please try again.");
+        } catch (e) { console.error(e); toast("error", "Network error. Please try again."); }
         finally { setSubmitting(false); }
     };
 
     return (
-        <div className="flex flex-col h-[calc(100vh-100px)]">
-            {/* Header & Controls */}
-            <div className="bg-white p-4 items-end gap-4 shadow-sm z-10 hidden md:flex border-b border-gray-200">
+        <div className="flex flex-col gap-4">
+            {/* Header & Controls — Responsive, no hidden md:flex */}
+            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col sm:flex-row items-start sm:items-end gap-3">
                 <div className="flex-1">
                     <h1 className="text-xl font-bold flex items-center gap-2 text-gray-800">
                         <Trophy className="h-6 w-6 text-emerald-600" />
@@ -294,59 +295,61 @@ function StaffMarksView() {
             </div>
 
             {/* Excel Grid Container */}
-            <div className="flex-1 overflow-auto bg-gray-50 relative">
-                {loading || fetchingMarks ? (
-                    <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-20"><Loader2 className="h-10 w-10 animate-spin text-emerald-600" /></div>
-                ) : null}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="overflow-auto max-h-[calc(100vh-340px)] bg-gray-50 relative">
+                    {loading || fetchingMarks ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-20"><Loader2 className="h-10 w-10 animate-spin text-emerald-600" /></div>
+                    ) : null}
 
-                <table className="w-full border-collapse bg-white shadow-sm">
-                    <thead className="sticky top-0 z-10 bg-gray-100 shadow-sm">
-                        <tr>
-                            <th className="p-3 border border-gray-200 text-xs text-gray-500 uppercase w-12 text-center bg-gray-100 sticky left-0 z-20">#</th>
-                            <th className="p-3 border border-gray-200 text-xs text-gray-500 uppercase text-left w-64 bg-gray-100 sticky left-12 z-20">Student Name</th>
-                            {SUBJECTS.map(sub => (
-                                <th key={sub} className="p-3 border border-gray-200 text-xs text-gray-500 uppercase w-24 text-center">{sub}</th>
-                            ))}
-                            <th className="p-3 border border-gray-200 text-xs text-emerald-600 uppercase w-20 bg-emerald-50 text-center font-bold">Total</th>
-                            <th className="p-3 border border-gray-200 text-xs text-blue-600 uppercase w-20 bg-blue-50 text-center font-bold">Avg</th>
-                            <th className="p-3 border border-gray-200 text-xs text-purple-600 uppercase w-20 bg-purple-50 text-center font-bold">Rank</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {studentsWithRank.length === 0 ? (
-                            <tr><td colSpan={SUBJECTS.length + 5} className="p-10 text-center text-gray-400">No students found for this filter.</td></tr>
-                        ) : (
-                            studentsWithRank.map((s) => (
-                                <tr key={s.studentId} className="hover:bg-gray-50 transition-colors">
-                                    <td className="p-2 border border-gray-100 text-center text-xs text-gray-400 bg-gray-50 sticky left-0 z-10">{s.rank}</td>
-                                    <td className="p-2 border border-gray-100 bg-white sticky left-12 z-10">
-                                        <div className="font-bold text-gray-800 text-sm whitespace-nowrap overflow-hidden text-ellipsis w-48" title={s.fullName}>{s.fullName}</div>
-                                        <div className="text-[10px] text-gray-400 font-mono">{s.studentId}</div>
-                                    </td>
-                                    {SUBJECTS.map(sub => (
-                                        <td key={sub} className="p-1 border border-gray-100">
-                                            <input
-                                                type="number"
-                                                className={clsx(
-                                                    "w-full h-full px-2 py-2 text-center text-sm font-bold outline-none focus:bg-emerald-50 focus:text-emerald-700 transition-colors",
-                                                    marksGrid[s.studentId]?.[sub] ? "text-gray-900" : "text-gray-300"
-                                                )}
-                                                placeholder="-"
-                                                value={marksGrid[s.studentId]?.[sub] || ""}
-                                                onChange={(e) => handleScoreChange(s.studentId, sub, e.target.value)}
-                                            />
+                    <table className="w-full border-collapse bg-white shadow-sm">
+                        <thead className="sticky top-0 z-10 bg-gray-100 shadow-sm">
+                            <tr>
+                                <th className="p-3 border border-gray-200 text-xs text-gray-500 uppercase w-12 text-center bg-gray-100 sticky left-0 z-20">#</th>
+                                <th className="p-3 border border-gray-200 text-xs text-gray-500 uppercase text-left w-64 bg-gray-100 sticky left-12 z-20">Student Name</th>
+                                {SUBJECTS.map(sub => (
+                                    <th key={sub} className="p-3 border border-gray-200 text-xs text-gray-500 uppercase w-24 text-center">{sub}</th>
+                                ))}
+                                <th className="p-3 border border-gray-200 text-xs text-emerald-600 uppercase w-20 bg-emerald-50 text-center font-bold">Total</th>
+                                <th className="p-3 border border-gray-200 text-xs text-blue-600 uppercase w-20 bg-blue-50 text-center font-bold">Avg</th>
+                                <th className="p-3 border border-gray-200 text-xs text-purple-600 uppercase w-20 bg-purple-50 text-center font-bold">Rank</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {studentsWithRank.length === 0 ? (
+                                <tr><td colSpan={SUBJECTS.length + 5} className="p-10 text-center text-gray-400">No students found for this filter.</td></tr>
+                            ) : (
+                                studentsWithRank.map((s) => (
+                                    <tr key={s.studentId} className="hover:bg-gray-50 transition-colors">
+                                        <td className="p-2 border border-gray-100 text-center text-xs text-gray-400 bg-gray-50 sticky left-0 z-10">{s.rank}</td>
+                                        <td className="p-2 border border-gray-100 bg-white sticky left-12 z-10">
+                                            <div className="font-bold text-gray-800 text-sm whitespace-nowrap overflow-hidden text-ellipsis w-48" title={s.fullName}>{s.fullName}</div>
+                                            <div className="text-[10px] text-gray-400 font-mono">{s.studentId}</div>
                                         </td>
-                                    ))}
-                                    <td className="p-2 border border-gray-100 text-center font-bold text-emerald-600 bg-emerald-50/30">{s.total}</td>
-                                    <td className="p-2 border border-gray-100 text-center font-bold text-blue-600 bg-blue-50/30">{s.avg}</td>
-                                    <td className="p-2 border border-gray-100 text-center font-bold text-purple-600 bg-purple-50/30 text-lg">
-                                        {s.rank <= 3 ? <span className="bg-purple-100 px-2 py-0.5 rounded-lg border border-purple-200">#{s.rank}</span> : `#{s.rank}`}
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
+                                        {SUBJECTS.map(sub => (
+                                            <td key={sub} className="p-1 border border-gray-100">
+                                                <input
+                                                    type="number"
+                                                    className={clsx(
+                                                        "w-full h-full px-2 py-2 text-center text-sm font-bold outline-none focus:bg-emerald-50 focus:text-emerald-700 transition-colors",
+                                                        marksGrid[s.studentId]?.[sub] ? "text-gray-900" : "text-gray-300"
+                                                    )}
+                                                    placeholder="-"
+                                                    value={marksGrid[s.studentId]?.[sub] || ""}
+                                                    onChange={(e) => handleScoreChange(s.studentId, sub, e.target.value)}
+                                                />
+                                            </td>
+                                        ))}
+                                        <td className="p-2 border border-gray-100 text-center font-bold text-emerald-600 bg-emerald-50/30">{s.total}</td>
+                                        <td className="p-2 border border-gray-100 text-center font-bold text-blue-600 bg-blue-50/30">{s.avg}</td>
+                                        <td className="p-2 border border-gray-100 text-center font-bold text-purple-600 bg-purple-50/30 text-lg">
+                                            {s.rank <= 3 ? <span className="bg-purple-100 px-2 py-0.5 rounded-lg border border-purple-200">#{s.rank}</span> : `#{s.rank}`}
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );

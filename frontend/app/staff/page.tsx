@@ -4,6 +4,7 @@ import AdminLayout from "@/components/AdminLayout";
 import { useState, useEffect } from "react";
 import { UserPlus, Trash2, Shield, Loader2, AlertCircle, Phone, Mail, CheckCircle, Search } from "lucide-react";
 import clsx from "clsx";
+import { useToast } from "@/components/Toast";
 
 interface Staff {
     id: number;
@@ -14,8 +15,10 @@ interface Staff {
 }
 
 export default function StaffPage() {
+    const { toast } = useToast();
     const [staffList, setStaffList] = useState<Staff[]>([]);
     const [loading, setLoading] = useState(true);
+    const [searchTerm, setSearchTerm] = useState("");
     const [showModal, setShowModal] = useState(false);
 
     // Form State

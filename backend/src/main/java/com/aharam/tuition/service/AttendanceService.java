@@ -19,6 +19,9 @@ public class AttendanceService {
     @Autowired
     private StudentRepository studentRepository;
 
+    @Autowired
+    private NotificationService notificationService;
+
     public Attendance markAttendance(String studentId, LocalDate date, Attendance.AttendanceStatus status,
             String recorder) {
         Student student = studentRepository.findById(studentId)
@@ -32,7 +35,17 @@ public class AttendanceService {
         attendance.setStatus(status);
         attendance.setRecordedBy(recorder);
 
-        return attendanceRepository.save(attendance);
+        Attendance saved = attendanceRepository.save(attendance);
+
+        // 🔔 WhatsApp-style: notify parent instantly
+        String emoji = (status == Attendance.AttendanceStatus.PRESENT) ? "✅" : "❌";
+        String statusWord = (status == Attendance.AttendanceStatus.PRESENT) ? "Present" : "Absent";
+        notificationService.sendToUser(
+                studentId,
+                emoji + " Attendance — " + date,
+                student.getFullName() + " is " + statusWord + " today.");
+
+        return saved;
     }
 
     public List<Attendance> getAttendanceByDate(LocalDate date) {
