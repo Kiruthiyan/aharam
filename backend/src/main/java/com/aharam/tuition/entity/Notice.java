@@ -5,33 +5,40 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Entity
-@Data
 @Table(name = "notices")
+@Data
 public class Notice {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "title_en", nullable = false)
-    private String titleEn; // English Title
+    @Column(nullable = false)
+    private String title;
 
-    @Column(name = "title_ta", nullable = false)
-    private String titleTa; // Tamil Title
+    @Column(nullable = false, length = 1500)
+    private String message;
 
-    @Column(name = "content_en", nullable = false, columnDefinition = "TEXT")
-    private String contentEn; // English Content
+    @Column(nullable = false)
+    private String audience; // STAFF, STUDENTS, ALL
 
-    @Column(name = "content_ta", nullable = false, columnDefinition = "TEXT")
-    private String contentTa; // Tamil Content
+    @Column(nullable = false)
+    private String channel; // APP, WHATSAPP, BOTH
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "target_audience")
-    private Role targetAudience; // NULL = All, or specifically 'STUDENT' / 'STAFF'
+    private String sentBy;
+    private String sentByRole;
 
-    @ManyToOne
-    @JoinColumn(name = "created_by", referencedColumnName = "id")
-    private User createdBy;
+    @Column(nullable = false)
+    private String at; // Storing as formatted string (e.g. DD/MM/YYYY HH:mm) for simplicity
 
-    @Column(updatable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private String status; // SENT, PENDING, FAILED
+
+    private Integer whatsappCount; // How many numbers it was sent to (if WHATSAPP)
+
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+    }
 }

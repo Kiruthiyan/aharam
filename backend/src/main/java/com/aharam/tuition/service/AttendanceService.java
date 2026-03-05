@@ -32,7 +32,7 @@ public class AttendanceService {
 
     @Transactional
     public Attendance markAttendance(String studentId, LocalDate date, Attendance.AttendanceStatus status,
-                             Long staffId) {
+            Long staffId) {
         Student student = studentRepository.findById(studentId)
                 .orElseThrow(() -> new RuntimeException("Student not found"));
 
@@ -52,12 +52,14 @@ public class AttendanceService {
         Attendance saved = attendanceRepository.save(attendance);
 
         // Notify parent
-        String emoji = (status == Attendance.AttendanceStatus.PRESENT) ? "✅" : (status == Attendance.AttendanceStatus.LATE ? "⏳" : "❌");
+        String emoji = (status == Attendance.AttendanceStatus.PRESENT) ? "✅"
+                : (status == Attendance.AttendanceStatus.LATE ? "⏳" : "❌");
         String statusWord = status.name().toLowerCase();
         notificationService.sendToUser(
                 studentId,
                 emoji + " Attendance — " + date,
-                student.getFullName() + " is " + statusWord + " today.");
+                student.getFullName() + " is " + statusWord + " today.",
+                "ATTENDANCE");
 
         return saved;
     }
@@ -87,7 +89,8 @@ public class AttendanceService {
         notificationService.sendToUser(
                 student.getStudentId(),
                 "✅ Attendance Marked",
-                student.getFullName() + " arrived at " + attendance.getTime());
+                student.getFullName() + " arrived at " + attendance.getTime(),
+                "ATTENDANCE");
 
         return saved;
     }

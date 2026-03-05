@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { useToast } from "@/components/Toast";
+import api from "@/lib/axios";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,7 @@ interface Student {
     examBatch?: number;
     gender?: string;
     center?: string;
+    phone?: string;
 }
 
 interface FeeRecord {
@@ -55,13 +57,13 @@ function StatCard({ title, value, sub, icon: Icon, color }: {
     title: string; value: string | number; sub?: string; icon: any; color: string;
 }) {
     return (
-        <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center gap-5 group hover:shadow-md transition-all">
-            <div className={clsx("h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105", color)}>
-                <Icon className="h-6 w-6" />
+        <div className="bg-white p-4 sm:p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 group hover:shadow-md transition-all">
+            <div className={clsx("h-10 w-10 sm:h-14 sm:w-14 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105", color)}>
+                <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
             </div>
-            <div>
-                <p className="text-3xl font-black tracking-tight text-gray-900">{value}</p>
-                <p className="text-[10px] uppercase font-black text-gray-400 tracking-widest mt-1">
+            <div className="min-w-0">
+                <p className="text-xl sm:text-3xl font-black tracking-tight text-gray-900 leading-none">{value}</p>
+                <p className="text-[9px] sm:text-[10px] uppercase font-black text-gray-400 tracking-widest mt-1 truncate">
                     {title}{sub && <span className="text-gray-300 ml-1 font-bold">{sub}</span>}
                 </p>
             </div>
@@ -111,6 +113,14 @@ function StaffFeesView({ staffId }: { staffId: string }) {
     const barcodeRef = useRef<HTMLInputElement>(null);
     const searchRef = useRef<HTMLInputElement>(null);
 
+    // Helpers
+    const openWhatsApp = (phone: string, text: string) => {
+        if (!phone) return;
+        const clean = phone.replace(/\D/g, "");
+        const number = clean.startsWith("0") ? "94" + clean.slice(1) : clean;
+        window.open(`https://wa.me/${number}?text=${encodeURIComponent(text)}`, "_blank");
+    };
+
     // Config
     const [month, setMonth] = useState(MONTHS[new Date().getMonth()]);
     const [year, setYear] = useState(String(new Date().getFullYear()));
@@ -142,13 +152,13 @@ function StaffFeesView({ staffId }: { staffId: string }) {
         const load = async () => {
             setLoadingData(true);
             try {
-                const token = localStorage.getItem("token");
-                const [sRes, fRes] = await Promise.all([
-                    fetch("http://localhost:8080/api/students", { headers: { "Authorization": `Bearer ${token}` } }),
-                    fetch(`http://localhost:8080/api/fees/batch/${batch}?month=${month}&academicYear=${year}`, { headers: { "Authorization": `Bearer ${token}` } })
+                const [sRes, fRes]: any = await Promise.all([
+                    api.get("/students"),
+                    api.get(`/fees/batch/${batch}?month=${month}&academicYear=${year}`)
                 ]);
-                if (sRes.ok) setAllStudents((await sRes.json()).filter((s: Student) => s.examBatch?.toString() === batch));
-                if (fRes.ok) setBatchFees(await fRes.json());
+                const studentsData = sRes.data || sRes;
+                setAllStudents(studentsData.filter((s: Student) => s.examBatch?.toString() === batch));
+                setBatchFees(fRes.data || fRes);
             } catch { } finally { setLoadingData(false); }
         };
         load();
@@ -160,51 +170,48 @@ function StaffFeesView({ staffId }: { staffId: string }) {
         if (!barcodeValue.trim()) return;
         setLoadingBarcode(true);
         try {
-            const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:8080/api/fees/scan", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ barcode: barcodeValue.trim(), month, academicYear: year, staffId: parseInt(staffId) })
-            });
-            if (res.ok) {
-                const rec: FeeRecord = await res.json();
-                setRecentScans(prev => [rec, ...prev.slice(0, 9)]);
-                setBatchFees(prev => [rec, ...prev.filter(f => f.student?.studentId !== rec.student?.studentId)]);
-                toast("success", `✔ ${rec.student?.fullName} — Fee PAID for ${month}`);
-                setBarcodeValue("");
-                barcodeRef.current?.focus();
-            } else {
-                const msg = await res.text();
-                if (msg.includes("already marked")) {
-                    toast("info", msg);
-                } else {
-                    toast("error", msg || "Student not found.");
-                }
-                setBarcodeValue("");
-                barcodeRef.current?.focus();
+            const res: any = await api.post("/fees/scan", { barcode: barcodeValue.trim(), month, academicYear: year, staffId: parseInt(staffId) });
+            const rec: FeeRecord = res.data || res;
+            setRecentScans(prev => [rec, ...prev.slice(0, 9)]);
+            setBatchFees(prev => [rec, ...prev.filter(f => f.student?.studentId !== rec.student?.studentId)]);
+            toast("success", `✔ ${rec.student?.fullName} — Fee PAID for ${month}`);
+
+            // Open WhatsApp auto-message fallback
+            if (rec.student?.phone) {
+                openWhatsApp(rec.student.phone, `✅ *Fee Update*\n\n${rec.student.fullName}'s fee for ${month} ${year} has been successfully paid.\n\n— Aharam Academy`);
             }
-        } catch { toast("error", "Connection error."); } finally { setLoadingBarcode(false); }
+
+            setBarcodeValue("");
+            barcodeRef.current?.focus();
+        } catch (err: any) {
+            const msg = err.message || "";
+            if (msg.includes("already marked")) {
+                toast("info", msg);
+            } else {
+                toast("error", msg || "Student not found.");
+            }
+            setBarcodeValue("");
+            barcodeRef.current?.focus();
+        } finally { setLoadingBarcode(false); }
     };
 
     // Manual mark
     const doManualMark = async (studentId: string, action: "PAID" | "PENDING") => {
         setMarkingId(studentId + action);
         try {
-            const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:8080/api/fees/manual", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ studentId, month, academicYear: year, status: action, staffId: parseInt(staffId) })
-            });
-            if (res.ok) {
-                const rec: FeeRecord = await res.json();
-                setBatchFees(prev => [rec, ...prev.filter(f => f.student?.studentId !== rec.student?.studentId)]);
-                toast("success", `${action}: ${rec.student?.fullName}`);
-                setConfirm(null);
-            } else {
-                toast("error", await res.text() || "Failed to update.");
+            const res: any = await api.post("/fees/manual", { studentId, month, academicYear: year, status: action, staffId: parseInt(staffId) });
+            const rec: FeeRecord = res.data || res;
+            setBatchFees(prev => [rec, ...prev.filter(f => f.student?.studentId !== rec.student?.studentId)]);
+            toast("success", `${action}: ${rec.student?.fullName}`);
+
+            // Open WhatsApp auto-message fallback
+            if (rec.student?.phone) {
+                const emoji = action === "PAID" ? "✅" : "⏳";
+                openWhatsApp(rec.student.phone, `${emoji} *Fee Update*\n\n${rec.student.fullName}'s fee for ${month} ${year} is now ${action}.\n\n— Aharam Academy`);
             }
-        } catch { toast("error", "Connection error."); } finally { setMarkingId(null); }
+
+            setConfirm(null);
+        } catch (err: any) { toast("error", err.message || "Failed to update."); } finally { setMarkingId(null); }
     };
 
     // Map of studentId -> fee record for batch view
@@ -278,15 +285,15 @@ function StaffFeesView({ staffId }: { staffId: string }) {
             <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
                 <div className="flex border-b border-gray-100 bg-gray-50/30">
                     {([
-                        { key: "BARCODE", label: "Barcode Scan", icon: Barcode },
-                        { key: "SEARCH", label: "Name / ID Search", icon: Search },
-                        { key: "BATCH", label: "Batch Monitor", icon: Users }
+                        { key: "BARCODE", label: "Barcode", icon: Barcode },
+                        { key: "SEARCH", label: "Name / ID", icon: Search },
+                        { key: "BATCH", label: "Batch", icon: Users }
                     ] as const).map(t => (
                         <button
                             key={t.key}
                             onClick={() => setTab(t.key)}
                             className={clsx(
-                                "flex-1 flex items-center justify-center gap-3 py-5 text-sm font-black transition-all border-b-2",
+                                "flex-1 flex items-center justify-center gap-1.5 sm:gap-3 py-3 sm:py-5 text-xs sm:text-sm font-black transition-all border-b-2",
                                 tab === t.key
                                     ? "text-emerald-700 border-emerald-600 bg-emerald-50/80 shadow-inner"
                                     : "text-gray-400 border-transparent hover:text-gray-600 hover:bg-gray-50"
@@ -346,7 +353,7 @@ function StaffFeesView({ staffId }: { staffId: string }) {
                                         <p className="font-bold text-sm text-gray-400 tracking-wide">No scans this session yet</p>
                                     </div>
                                 ) : (
-                                    <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
+                                    <div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-hide">
                                         {recentScans.map((r, i) => (
                                             <div key={i} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:border-emerald-200 transition-all">
                                                 <div>
@@ -442,7 +449,7 @@ function StaffFeesView({ staffId }: { staffId: string }) {
                         {loadingData ? (
                             <div className="flex justify-center py-24"><Loader2 className="h-10 w-10 animate-spin text-emerald-500" /></div>
                         ) : (
-                            <div className="overflow-auto max-h-[580px]">
+                            <div className="overflow-auto max-h-[580px] scrollbar-hide">
                                 <table className="w-full text-sm text-left">
                                     <thead className="bg-gray-50/50 border-b border-gray-100 sticky top-0 backdrop-blur-md z-10">
                                         <tr>
@@ -523,13 +530,12 @@ function AdminFeesView() {
     const load = async () => {
         setLoading(true);
         try {
-            const token = localStorage.getItem("token");
-            const [sRes, rRes] = await Promise.all([
-                fetch(`http://localhost:8080/api/fees/admin/summary?academicYear=${year}`, { headers: { "Authorization": `Bearer ${token}` } }),
-                fetch(`http://localhost:8080/api/fees/admin/all?academicYear=${year}`, { headers: { "Authorization": `Bearer ${token}` } })
+            const [sRes, rRes]: any = await Promise.all([
+                api.get(`/fees/admin/summary?academicYear=${year}`),
+                api.get(`/fees/admin/all?academicYear=${year}`)
             ]);
-            if (sRes.ok) setSummary(await sRes.json());
-            if (rRes.ok) setRecords(await rRes.json());
+            setSummary(sRes.data || sRes);
+            setRecords(rRes.data || rRes);
         } catch { } finally { setLoading(false); }
     };
 
@@ -631,7 +637,7 @@ function AdminFeesView() {
                                     {isOpen ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
                                 </button>
                                 {isOpen && (
-                                    <div className="overflow-auto max-h-80 border-t border-gray-50">
+                                    <div className="overflow-auto max-h-80 border-t border-gray-50 scrollbar-hide">
                                         <table className="w-full text-xs text-left">
                                             <thead className="bg-gray-50 sticky top-0">
                                                 <tr>
@@ -672,9 +678,8 @@ function StudentFeesView({ userId }: { userId: string }) {
     useEffect(() => {
         const load = async () => {
             try {
-                const token = localStorage.getItem("token");
-                const res = await fetch(`http://localhost:8080/api/fees/student/${userId}`, { headers: { "Authorization": `Bearer ${token}` } });
-                if (res.ok) setRecords(await res.json());
+                const res: any = await api.get(`/fees/student/${userId}`);
+                setRecords(res.data || res);
             } catch { } finally { setLoading(false); }
         };
         if (userId) load();

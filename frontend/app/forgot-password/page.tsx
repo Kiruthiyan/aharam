@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, Mail, KeyRound, Eye, EyeOff, Lock, ArrowLeft, CheckCircle, AlertCircle, ShieldCheck } from "lucide-react";
 import clsx from "clsx";
+import api from "@/lib/axios";
 
 function PasswordStrengthBar({ password }: { password: string }) {
     const getStrength = () => {
@@ -46,14 +47,9 @@ export default function ForgotPasswordPage() {
         e.preventDefault();
         setLoading(true); setError(null);
         try {
-            const res = await fetch("http://localhost:8080/api/auth/forgot-password", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email })
-            });
-            if (res.ok) { setStep(2); }
-            else { setError(await res.text() || "Failed to send OTP."); }
-        } catch { setError("Network error. Please try again."); }
+            await api.post("/auth/forgot-password", { email });
+            setStep(2);
+        } catch (err: any) { setError(err.message || "Failed to send OTP."); }
         finally { setLoading(false); }
     };
 
@@ -61,14 +57,9 @@ export default function ForgotPasswordPage() {
         e.preventDefault();
         setLoading(true); setError(null);
         try {
-            const res = await fetch("http://localhost:8080/api/auth/verify-otp", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, otp })
-            });
-            if (res.ok) { setStep(3); }
-            else { setError(await res.text() || "Invalid or expired OTP."); }
-        } catch { setError("Network error. Please try again."); }
+            await api.post("/auth/verify-otp", { email, otp });
+            setStep(3);
+        } catch (err: any) { setError(err.message || "Invalid or expired OTP."); }
         finally { setLoading(false); }
     };
 
@@ -78,14 +69,9 @@ export default function ForgotPasswordPage() {
         if (newPassword.length < 6) { setError("Password must be at least 6 characters."); return; }
         setLoading(true); setError(null);
         try {
-            const res = await fetch("http://localhost:8080/api/auth/reset-password", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, otp, newPassword })
-            });
-            if (res.ok) { setStep(4); }
-            else { setError(await res.text() || "Failed to reset password."); }
-        } catch { setError("Network error. Please try again."); }
+            await api.post("/auth/reset-password", { email, otp, newPassword });
+            setStep(4);
+        } catch (err: any) { setError(err.message || "Failed to reset password."); }
         finally { setLoading(false); }
     };
 

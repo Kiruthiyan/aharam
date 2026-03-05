@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { useToast } from "@/components/Toast";
+import api from "@/lib/axios";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,7 @@ interface Student {
     center?: string;
     gender?: string;
     barcode?: string;
+    phone?: string;
 }
 
 interface AttendanceRecord {
@@ -53,13 +55,13 @@ function StatCard({ title, value, sub, icon: Icon, color }: {
     title: string; value: string | number; sub?: string; icon: any; color: string;
 }) {
     return (
-        <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center gap-5 group hover:shadow-md transition-all">
-            <div className={clsx("h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105", color)}>
-                <Icon className="h-6 w-6" />
+        <div className="bg-white p-4 sm:p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 group hover:shadow-md transition-all">
+            <div className={clsx("h-10 w-10 sm:h-14 sm:w-14 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105", color)}>
+                <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
             </div>
-            <div>
-                <p className="text-3xl font-black tracking-tight text-gray-900">{value}</p>
-                <p className="text-[10px] uppercase font-black text-gray-400 tracking-widest mt-1">
+            <div className="min-w-0">
+                <p className="text-xl sm:text-3xl font-black tracking-tight text-gray-900 leading-none">{value}</p>
+                <p className="text-[9px] sm:text-[10px] uppercase font-black text-gray-400 tracking-widest mt-1 truncate">
                     {title}{sub && <span className="text-gray-300 ml-1 font-bold">{sub}</span>}
                 </p>
             </div>
@@ -73,6 +75,14 @@ function StaffAttendanceView({ userId }: { userId: string }) {
     const { toast } = useToast();
     const barcodeRef = useRef<HTMLInputElement>(null);
     const searchRef = useRef<HTMLInputElement>(null);
+
+    // Helpers
+    const openWhatsApp = (phone: string, text: string) => {
+        if (!phone) return;
+        const clean = phone.replace(/\D/g, "");
+        const number = clean.startsWith("0") ? "94" + clean.slice(1) : clean;
+        window.open(`https://wa.me/${number}?text=${encodeURIComponent(text)}`, "_blank");
+    };
 
     // Session config
     const [batch, setBatch] = useState("2026");
@@ -102,14 +112,9 @@ function StaffAttendanceView({ userId }: { userId: string }) {
     const startSession = async () => {
         setLoadingStudents(true);
         try {
-            const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:8080/api/students", {
-                headers: { "Authorization": `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const all: Student[] = await res.json();
-                setAllStudents(all.filter(s => s.examBatch?.toString() === batch));
-            }
+            const data: any = await api.get("/students");
+            const all: Student[] = data.data || data;
+            setAllStudents(all.filter(s => s.examBatch?.toString() === batch));
         } catch (e) { console.error(e); }
         setLoadingStudents(false);
         setIsSessionActive(true);
@@ -122,24 +127,14 @@ function StaffAttendanceView({ userId }: { userId: string }) {
 
         setLoadingAction("scan");
         try {
-            const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:8080/api/attendance/scan", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ barcode: scannedBarcode.trim(), staffId: userId, batch, center })
-            });
-            if (res.ok) {
-                const rec: AttendanceRecord = await res.json();
-                addOrUpdate(rec);
-                toast("success", `✔ ${rec.student.fullName} — PRESENT`);
-                setScannedBarcode("");
-            } else {
-                const msg = await res.text();
-                toast("error", msg || "Barcode not recognised");
-                setScannedBarcode("");
-            }
-        } catch {
-            toast("error", "Connection error — check server.");
+            const res: any = await api.post("/attendance/scan", { barcode: scannedBarcode.trim(), staffId: userId, batch, center });
+            const rec: AttendanceRecord = res.data || res;
+            addOrUpdate(rec);
+            toast("success", `✔ ${rec.student.fullName} — PRESENT`);
+            setScannedBarcode("");
+        } catch (err: any) {
+            toast("error", err.message || "Barcode not recognised");
+            setScannedBarcode("");
         } finally {
             setLoadingAction(null);
             barcodeRef.current?.focus();
@@ -150,23 +145,22 @@ function StaffAttendanceView({ userId }: { userId: string }) {
     const markManual = async (studentId: string, status: "PRESENT" | "LATE" | "ABSENT") => {
         setLoadingAction(studentId + status);
         try {
-            const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:8080/api/attendance/mark-manual", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ studentId, status, staffId: userId, date: targetDate })
-            });
-            if (res.ok) {
-                const rec: AttendanceRecord = await res.json();
-                addOrUpdate(rec);
-                toast("success", `${status}: ${rec.student.fullName}`);
-                setSearchQuery("");
-                setShowSearch(false);
-            } else {
-                toast("error", "Failed to mark attendance.");
+            const res: any = await api.post("/attendance/mark-manual", { studentId, status, staffId: userId, date: targetDate });
+            const rec: AttendanceRecord = res.data || res;
+            addOrUpdate(rec);
+            toast("success", `${status}: ${rec.student.fullName}`);
+
+            // Auto-message parent
+            if (rec.student?.phone) {
+                const emoji = status === "PRESENT" ? "✅" : status === "LATE" ? "⏳" : "❌";
+                const statusWord = status.toLowerCase();
+                openWhatsApp(rec.student.phone, `${emoji} *Attendance Update*\n\n${rec.student.fullName} is ${statusWord} today (${new Date().toLocaleDateString("en-GB")}).\n\n— Aharam Academy`);
             }
-        } catch {
-            toast("error", "Connection error.");
+
+            setSearchQuery("");
+            setShowSearch(false);
+        } catch (err: any) {
+            toast("error", err.message || "Failed to mark attendance.");
         } finally {
             setLoadingAction(null);
         }
@@ -181,19 +175,12 @@ function StaffAttendanceView({ userId }: { userId: string }) {
         if (!confirm("End session? All unmarked students in this batch will be marked ABSENT.")) return;
         setLoadingAction("end");
         try {
-            const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:8080/api/attendance/end-session", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ batch, date: targetDate, staffId: userId })
-            });
-            if (res.ok) {
-                setIsSessionActive(false);
-                toast("info", "Session closed. Auto-absent processed for unmarked students.");
-                setSessionRecords([]);
-            }
-        } catch {
-            toast("error", "Error ending session.");
+            await api.post("/attendance/end-session", { batch, date: targetDate, staffId: userId });
+            setIsSessionActive(false);
+            toast("info", "Session closed. Auto-absent processed for unmarked students.");
+            setSessionRecords([]);
+        } catch (err: any) {
+            toast("error", err.message || "Error ending session.");
         } finally {
             setLoadingAction(null);
         }
@@ -219,18 +206,18 @@ function StaffAttendanceView({ userId }: { userId: string }) {
     const markedIds = new Set(sessionRecords.map(r => r.student.studentId));
 
     return (
-        <div className="flex flex-col gap-8 max-w-6xl mx-auto pb-20">
+        <div className="flex flex-col gap-4 sm:gap-8 max-w-6xl mx-auto pb-20">
             {/* ── Config Panel ─────────────────────────────────────────── */}
-            <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
-                <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+            <div className="bg-white p-4 sm:p-8 rounded-[2rem] border border-gray-100 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-black tracking-tight text-gray-900 flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-sm">
-                                <Shield className="h-5 w-5" />
+                        <h1 className="text-xl sm:text-2xl font-black tracking-tight text-gray-900 flex items-center gap-3">
+                            <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl sm:rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-sm shrink-0">
+                                <Shield className="h-4 w-4 sm:h-5 sm:w-5" />
                             </div>
                             Attendance Session
                         </h1>
-                        <p className="text-sm text-gray-400 mt-2 font-medium ml-13 border-l-2 border-emerald-100 pl-3">
+                        <p className="text-xs sm:text-sm text-gray-400 mt-2 font-medium ml-12 border-l-2 border-emerald-100 pl-3">
                             {isSessionActive
                                 ? <span className="flex items-center gap-2 text-emerald-600 font-bold"><span className="relative flex h-2 w-2"><span className="animate-ping absolute h-2 w-2 rounded-full bg-emerald-400 opacity-75" /><span className="h-2 w-2 rounded-full bg-emerald-500" /></span>Session active — scanning for {center}</span>
                                 : "Configure center and batch, then start session."}
@@ -424,7 +411,7 @@ function StaffAttendanceView({ userId }: { userId: string }) {
                         <span className="text-red-500 flex items-center gap-1.5"><X className="h-3.5 w-3.5" /> {stats.absent} Absent</span>
                     </div>
                 </div>
-                <div className="overflow-auto max-h-[500px]">
+                <div className="overflow-auto max-h-[500px] scrollbar-hide">
                     <table className="w-full text-left text-sm">
                         <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
                             <tr>
@@ -497,12 +484,8 @@ function AdminAttendanceView() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const token = localStorage.getItem("token");
-            const res = await fetch(
-                `http://localhost:8080/api/attendance/batch/${batch}?start=${range.start}&end=${range.end}`,
-                { headers: { "Authorization": `Bearer ${token}` } }
-            );
-            if (res.ok) setRecords(await res.json());
+            const data: any = await api.get(`/attendance/batch/${batch}?start=${range.start}&end=${range.end}`);
+            setRecords(data.data || data);
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
@@ -582,7 +565,7 @@ function AdminAttendanceView() {
                     </h3>
                     <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-200">{filtered.length} records</span>
                 </div>
-                <div className="overflow-auto max-h-[580px]">
+                <div className="overflow-auto max-h-[580px] scrollbar-hide">
                     {loading ? (
                         <div className="py-24 flex justify-center"><Loader2 className="h-10 w-10 animate-spin text-emerald-500" /></div>
                     ) : (
@@ -631,11 +614,8 @@ function StudentAttendanceView({ userId }: { userId: string }) {
     useEffect(() => {
         const fetch_ = async () => {
             try {
-                const token = localStorage.getItem("token");
-                const res = await fetch(`http://localhost:8080/api/attendance/student/${userId}`, {
-                    headers: { "Authorization": `Bearer ${token}` }
-                });
-                if (res.ok) setRecords(await res.json());
+                const data: any = await api.get(`/attendance/student/${userId}`);
+                setRecords(data.data || data);
             } catch (e) { console.error(e); } finally { setLoading(false); }
         };
         if (userId) fetch_();

@@ -71,7 +71,8 @@ public class MarkService {
         notificationService.sendToUser(
                 studentId,
                 "📊 Result Published: " + exam.getName(),
-                "Your result for " + exam.getSubject() + " is out. Grade: " + saved.getGrade());
+                "Your result for " + exam.getSubject() + " is out. Grade: " + saved.getGrade(),
+                "ACADEMICS");
 
         return saved;
     }
@@ -79,12 +80,16 @@ public class MarkService {
     private String calculateGrade(Double score, Double maxMarks) {
         double percentage = (score / maxMarks) * 100;
         List<GradeRule> rules = gradeRuleRepository.findAll();
-        
+
         if (rules.isEmpty()) {
-            if (percentage >= 90) return "A";
-            if (percentage >= 75) return "B";
-            if (percentage >= 65) return "C";
-            if (percentage >= 50) return "S";
+            if (percentage >= 90)
+                return "A";
+            if (percentage >= 75)
+                return "B";
+            if (percentage >= 65)
+                return "C";
+            if (percentage >= 50)
+                return "S";
             return "F";
         }
 
@@ -109,14 +114,15 @@ public class MarkService {
 
     public Map<String, Object> getSubjectAnalytics(Long examId) {
         List<Mark> marks = markRepository.findByExam_IdAndDeletedAtIsNull(examId);
-        if (marks.isEmpty()) return Collections.emptyMap();
+        if (marks.isEmpty())
+            return Collections.emptyMap();
 
         DoubleSummaryStatistics stats = marks.stream()
                 .mapToDouble(Mark::getMarksObtained)
                 .summaryStatistics();
 
         long passCount = marks.stream().filter(m -> !m.getGrade().equals("F")).count();
-        
+
         Map<String, Long> gradeDist = marks.stream()
                 .collect(Collectors.groupingBy(Mark::getGrade, Collectors.counting()));
 

@@ -1,8 +1,13 @@
 package com.aharam.tuition.service;
 
 import com.aharam.tuition.entity.PushToken;
+import com.aharam.tuition.entity.Student;
+import com.aharam.tuition.entity.NotificationLog;
+import com.aharam.tuition.repository.NotificationLogRepository;
 import com.aharam.tuition.repository.PushTokenRepository;
+import com.aharam.tuition.repository.StudentRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -16,6 +21,12 @@ public class NotificationService {
 
     @Autowired
     private PushTokenRepository pushTokenRepository;
+
+    @Autowired
+    private NotificationLogRepository notificationLogRepository;
+
+    @Autowired
+    private StudentRepository studentRepository;
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
@@ -33,16 +44,44 @@ public class NotificationService {
     }
 
     /**
-     * Send WhatsApp-style push notification to a specific user.
+     * Send WhatsApp-style push notification to a specific user asynchronously.
      */
-    public void sendToUser(String userId, String title, String body) {
-        List<PushToken> tokens = pushTokenRepository.findByUserId(userId);
-        if (tokens.isEmpty()) {
-            System.out.println("[Push] No tokens for user: " + userId);
-            return;
-        }
-        for (PushToken pt : tokens) {
-            sendPush(pt.getToken(), title, body);
+    @Async
+    public void sendToUser(String userId, String title, String body, String module) {
+        Student student = studentRepository.findById(userId).orElse(null);
+
+        NotificationLog log = new NotificationLog();
+        log.setStudent(student);
+        log.setModule(module != null ? module : "CUSTOM");
+        log.setChannel("WHATSAPP");
+        log.setTargetNumber(
+                student != null && student.getWhatsappNumber() != null ? student.getWhatsappNumber() : userId);
+        log.setMessageContent(title + "\n\n" + body);
+
+        try {
+            // Log as pending
+            log.setStatus("PENDING");
+            log = notificationLogRepository.save(log);
+
+            // Execute the push/whatsapp send logic
+            List<PushToken> tokens = pushTokenRepository.findByUserId(userId);
+            if (tokens.isEmpty()) {
+                System.out.println("[Push] No tokens for user: " + userId + " (simulating WhatsApp send)");
+            } else {
+                for (PushToken pt : tokens) {
+                    sendPush(pt.getToken(), title, body);
+                }
+            }
+
+            // Mark successful
+            log.setStatus("SENT");
+            log.setCompletedAt(java.time.LocalDateTime.now());
+            notificationLogRepository.save(log);
+
+        } catch (Exception e) {
+            log.setStatus("FAILED");
+            log.setErrorReason(e.getMessage());
+            notificationLogRepository.save(log);
         }
     }
 

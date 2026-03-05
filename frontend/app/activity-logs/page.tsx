@@ -36,15 +36,15 @@ export default function ActivityLogsPage() {
       <div className="max-w-7xl mx-auto space-y-6 pb-20">
 
         {/* Header */}
-        <div className="bg-white px-8 py-6 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between gap-6">
-          <div className="flex items-center gap-5">
-            <div className="h-14 w-14 rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-sm shrink-0">
-              <FileText className="h-6 w-6" />
+        <div className="bg-white p-4 sm:p-6 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col sm:flex-row justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="h-10 w-10 sm:h-14 sm:w-14 rounded-xl sm:rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-sm shrink-0">
+              <FileText className="h-5 w-5 sm:h-6 sm:w-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-black text-gray-900 tracking-tight">System Activity Logs</h1>
-              <p className="text-sm text-gray-400 font-medium mt-1">
-                Audit trail for attendance, fees, student updates, and staff actions.
+              <h1 className="text-lg sm:text-2xl font-black text-gray-900 tracking-tight">System Activity Logs</h1>
+              <p className="text-xs sm:text-sm text-gray-400 font-medium mt-0.5">
+                Audit trail for attendance, fees, and staff actions.
               </p>
             </div>
           </div>

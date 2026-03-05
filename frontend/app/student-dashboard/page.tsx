@@ -29,7 +29,7 @@ export default function StudentDashboard() {
         // In a real scenario, we'll fetch from `/api/dashboard/stats`
         const storedName = localStorage.getItem("name") || localStorage.getItem("username") || "Student";
         setStudentName(storedName);
-        
+
         // Mock data for the static UI build:
         setStats({
             attendancePct: 92.5,
@@ -70,50 +70,48 @@ export default function StudentDashboard() {
                 </div>
 
                 {/* Key Metrics */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 hover:shadow-lg transition-all duration-300 group">
-                        <div className="p-3 rounded-2xl bg-emerald-50 w-fit text-emerald-600 mb-4 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                            <Calendar className="h-6 w-6" />
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6 hover:shadow-lg transition-all duration-300 group">
+                        <div className="p-2 sm:p-3 rounded-xl bg-emerald-50 w-fit text-emerald-600 mb-3 sm:mb-4 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                            <Calendar className="h-5 w-5" />
                         </div>
-                        <div className="flex items-baseline gap-2">
-                            <p className="text-4xl font-black text-gray-900 tracking-tighter">{stats.attendancePct}%</p>
-                        </div>
-                        <p className="text-[10px] text-gray-400 mt-2 font-bold uppercase tracking-widest">Attendance Rate</p>
+                        <p className="text-2xl sm:text-4xl font-black text-gray-900 tracking-tighter">{stats.attendancePct}%</p>
+                        <p className="text-[9px] sm:text-[10px] text-gray-400 mt-1.5 font-bold uppercase tracking-widest">Attendance Rate</p>
                     </div>
 
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 hover:shadow-lg transition-all duration-300 group">
-                        <div className="p-3 rounded-2xl bg-blue-50 w-fit text-blue-600 mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                            <TrendingUp className="h-6 w-6" />
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6 hover:shadow-lg transition-all duration-300 group">
+                        <div className="p-2 sm:p-3 rounded-xl bg-blue-50 w-fit text-blue-600 mb-3 sm:mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                            <TrendingUp className="h-5 w-5" />
                         </div>
-                        <p className="text-4xl font-black text-gray-900 tracking-tighter">{stats.averageScore}%</p>
-                        <p className="text-[10px] text-gray-400 mt-2 font-bold uppercase tracking-widest">Average Marks</p>
+                        <p className="text-2xl sm:text-4xl font-black text-gray-900 tracking-tighter">{stats.averageScore}%</p>
+                        <p className="text-[9px] sm:text-[10px] text-gray-400 mt-1.5 font-bold uppercase tracking-widest">Average Marks</p>
                     </div>
 
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 hover:shadow-lg transition-all duration-300 group">
-                        <div className="p-3 rounded-2xl bg-indigo-50 w-fit text-indigo-600 mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                            <BookOpen className="h-6 w-6" />
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6 hover:shadow-lg transition-all duration-300 group">
+                        <div className="p-2 sm:p-3 rounded-xl bg-indigo-50 w-fit text-indigo-600 mb-3 sm:mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                            <BookOpen className="h-5 w-5" />
                         </div>
-                        <p className="text-4xl font-black text-gray-900 tracking-tighter">{stats.totalExams}</p>
-                        <p className="text-[10px] text-gray-400 mt-2 font-bold uppercase tracking-widest">Exams Completed</p>
+                        <p className="text-2xl sm:text-4xl font-black text-gray-900 tracking-tighter">{stats.totalExams}</p>
+                        <p className="text-[9px] sm:text-[10px] text-gray-400 mt-1.5 font-bold uppercase tracking-widest">Exams Completed</p>
                     </div>
 
                     <div className={clsx(
-                        "rounded-3xl border shadow-sm p-6 hover:shadow-lg transition-all duration-300 group",
+                        "rounded-2xl border shadow-sm p-4 sm:p-6 hover:shadow-lg transition-all duration-300 group",
                         stats.pendingFees && stats.pendingFees > 0 ? "bg-red-50/50 border-red-100" : "bg-white border-gray-100"
                     )}>
                         <div className={clsx(
-                            "p-3 rounded-2xl w-fit mb-4 transition-colors",
-                            stats.pendingFees && stats.pendingFees > 0 
-                                ? "bg-red-100 text-red-600 group-hover:bg-red-600 group-hover:text-white" 
+                            "p-2 sm:p-3 rounded-xl w-fit mb-3 sm:mb-4 transition-colors",
+                            stats.pendingFees && stats.pendingFees > 0
+                                ? "bg-red-100 text-red-600 group-hover:bg-red-600 group-hover:text-white"
                                 : "bg-teal-50 text-teal-600 group-hover:bg-teal-600 group-hover:text-white"
                         )}>
-                            {stats.pendingFees && stats.pendingFees > 0 ? <AlertTriangle className="h-6 w-6" /> : <CheckCircle2 className="h-6 w-6" />}
+                            {stats.pendingFees && stats.pendingFees > 0 ? <AlertTriangle className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
                         </div>
-                        <div className="flex items-baseline gap-2">
-                            <span className="text-xl font-bold text-gray-400">Rs.</span>
-                            <p className="text-4xl font-black text-gray-900 tracking-tighter">{stats.pendingFees}</p>
+                        <div className="flex items-baseline gap-1">
+                            <span className="text-sm font-bold text-gray-400">Rs.</span>
+                            <p className="text-2xl sm:text-4xl font-black text-gray-900 tracking-tighter">{stats.pendingFees}</p>
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-2 font-bold uppercase tracking-widest">Pending Fees</p>
+                        <p className="text-[9px] sm:text-[10px] text-gray-400 mt-1.5 font-bold uppercase tracking-widest">Pending Fees</p>
                     </div>
                 </div>
 
@@ -130,12 +128,12 @@ export default function StudentDashboard() {
                                     <div className={clsx(
                                         "p-2.5 rounded-xl shrink-0",
                                         act.type === "academic" ? "bg-blue-50 text-blue-600" :
-                                        act.type === "fee" ? "bg-teal-50 text-teal-600" :
-                                        "bg-amber-50 text-amber-600"
+                                            act.type === "fee" ? "bg-teal-50 text-teal-600" :
+                                                "bg-amber-50 text-amber-600"
                                     )}>
                                         {act.type === "academic" ? <BookOpen className="h-5 w-5" /> :
-                                         act.type === "fee" ? <CheckCircle2 className="h-5 w-5" /> :
-                                         <AlertTriangle className="h-5 w-5" />}
+                                            act.type === "fee" ? <CheckCircle2 className="h-5 w-5" /> :
+                                                <AlertTriangle className="h-5 w-5" />}
                                     </div>
                                     <div>
                                         <p className="text-sm font-bold text-gray-900">{act.title}</p>

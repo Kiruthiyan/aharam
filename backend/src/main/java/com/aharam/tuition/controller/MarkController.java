@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import com.aharam.tuition.dto.ApiResponse;
 
 @RestController
 @RequestMapping("/api/marks")
@@ -22,37 +23,40 @@ public class MarkController {
     // --- Exam Endpoints ---
 
     @PostMapping("/exams/create")
-    public ResponseEntity<?> createExam(@RequestBody Exam exam, @RequestParam Long staffId) {
-        return ResponseEntity.ok(markService.createExam(exam, staffId));
+    public ResponseEntity<ApiResponse<Exam>> createExam(@RequestBody Exam exam, @RequestParam Long staffId) {
+        return ResponseEntity
+                .ok(ApiResponse.success(markService.createExam(exam, staffId), "Exam created successfully"));
     }
 
     @GetMapping("/exams/batch/{batch}")
-    public ResponseEntity<List<Exam>> getExamsByBatch(@PathVariable String batch) {
-        return ResponseEntity.ok(markService.getActiveExamsByBatch(batch));
+    public ResponseEntity<ApiResponse<List<Exam>>> getExamsByBatch(@PathVariable String batch) {
+        return ResponseEntity.ok(ApiResponse.success(markService.getActiveExamsByBatch(batch), "Fetched batch exams"));
     }
 
     // --- Marks Endpoints ---
 
     @PostMapping("/bulk-save")
-    public ResponseEntity<?> bulkSaveMarks(@RequestBody BulkSaveRequest request) {
+    public ResponseEntity<ApiResponse<List<Mark>>> bulkSaveMarks(@RequestBody BulkSaveRequest request) {
         try {
-            return ResponseEntity.ok(markService.bulkSaveMarks(
+            return ResponseEntity.ok(ApiResponse.success(markService.bulkSaveMarks(
                     request.getExamId(),
                     request.getEntries(),
-                    request.getStaffId()));
+                    request.getStaffId()), "Bulk marks saved successfully"));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage(), "BULK_SAVE_FAILED"));
         }
     }
 
     @GetMapping("/student/{studentId}")
-    public ResponseEntity<List<Mark>> getStudentResults(@PathVariable String studentId) {
-        return ResponseEntity.ok(markService.getStudentResults(studentId));
+    public ResponseEntity<ApiResponse<List<Mark>>> getStudentResults(@PathVariable String studentId) {
+        return ResponseEntity
+                .ok(ApiResponse.success(markService.getStudentResults(studentId), "Fetched student results"));
     }
 
     @GetMapping("/analytics/{examId}")
-    public ResponseEntity<?> getAnalytics(@PathVariable Long examId) {
-        return ResponseEntity.ok(markService.getSubjectAnalytics(examId));
+    public ResponseEntity<ApiResponse<?>> getAnalytics(@PathVariable Long examId) {
+        return ResponseEntity
+                .ok(ApiResponse.success(markService.getSubjectAnalytics(examId), "Fetched exam analytics"));
     }
 
     @Data

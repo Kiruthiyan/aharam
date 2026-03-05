@@ -4,13 +4,14 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Loader2, AlertCircle, Lock } from "lucide-react";
+import api from "@/lib/axios";
 
 export default function ChangePasswordPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
-    
+
     const [formData, setFormData] = useState({
         oldPassword: "",
         newPassword: "",
@@ -20,7 +21,7 @@ export default function ChangePasswordPage() {
     useEffect(() => {
         const token = localStorage.getItem("token");
         const requirePassChange = localStorage.getItem("requirePasswordChange");
-        
+
         if (!token) {
             router.push("/login");
         } else if (requirePassChange !== "true") {
@@ -30,12 +31,12 @@ export default function ChangePasswordPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         if (formData.newPassword !== formData.confirmPassword) {
             setError("New passwords do not match");
             return;
         }
-        
+
         setLoading(true);
         setError(null);
 
@@ -43,36 +44,24 @@ export default function ChangePasswordPage() {
         const token = localStorage.getItem("token");
 
         try {
-            const res = await fetch("http://localhost:8080/api/auth/change-password", {
-                method: "POST",
-                headers: { 
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}` 
-                },
-                body: JSON.stringify({
-                    username: username,
-                    oldPassword: formData.oldPassword,
-                    newPassword: formData.newPassword
-                })
+            await api.post("/auth/change-password", {
+                username: username,
+                oldPassword: formData.oldPassword,
+                newPassword: formData.newPassword
             });
 
-            if (res.ok) {
-                setSuccess(true);
-                localStorage.removeItem("requirePasswordChange");
-                setTimeout(() => {
-                    const role = localStorage.getItem("userRole");
-                    if (role === "STUDENT") {
-                        window.location.href = "/student-dashboard";
-                    } else {
-                        window.location.href = "/dashboard";
-                    }
-                }, 2000);
-            } else {
-                const data = await res.json();
-                setError(data.message || "Failed to change password. Please check your current password.");
-            }
-        } catch (err) {
-            setError("Network error. Please try again later.");
+            setSuccess(true);
+            localStorage.removeItem("requirePasswordChange");
+            setTimeout(() => {
+                const role = localStorage.getItem("userRole");
+                if (role === "STUDENT") {
+                    window.location.href = "/student-dashboard";
+                } else {
+                    window.location.href = "/dashboard";
+                }
+            }, 2000);
+        } catch (err: any) {
+            setError(err.message || "Failed to change password. Please check your current password.");
         } finally {
             setLoading(false);
         }
@@ -105,7 +94,7 @@ export default function ChangePasswordPage() {
                         For security reasons, you must change your default password before accessing the system.
                     </p>
                 </div>
-                
+
                 <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
                     {error && (
                         <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg flex items-center">
@@ -113,7 +102,7 @@ export default function ChangePasswordPage() {
                             {error}
                         </div>
                     )}
-                    
+
                     <div className="space-y-5">
                         <div>
                             <label className="text-sm font-bold text-gray-700 mb-2 block">Current Password (Temporary)</label>
@@ -121,7 +110,7 @@ export default function ChangePasswordPage() {
                                 type="password"
                                 required
                                 value={formData.oldPassword}
-                                onChange={(e) => setFormData({...formData, oldPassword: e.target.value})}
+                                onChange={(e) => setFormData({ ...formData, oldPassword: e.target.value })}
                                 className="w-full bg-gray-50 border border-gray-200 px-4 py-3 rounded-2xl text-sm font-medium outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all hover:bg-white"
                             />
                         </div>
@@ -132,7 +121,7 @@ export default function ChangePasswordPage() {
                                 required
                                 minLength={6}
                                 value={formData.newPassword}
-                                onChange={(e) => setFormData({...formData, newPassword: e.target.value})}
+                                onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
                                 className="w-full bg-gray-50 border border-gray-200 px-4 py-3 rounded-2xl text-sm font-medium outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all hover:bg-white"
                             />
                         </div>
@@ -143,7 +132,7 @@ export default function ChangePasswordPage() {
                                 required
                                 minLength={6}
                                 value={formData.confirmPassword}
-                                onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
+                                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                                 className="w-full bg-gray-50 border border-gray-200 px-4 py-3 rounded-2xl text-sm font-medium outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all hover:bg-white"
                             />
                         </div>

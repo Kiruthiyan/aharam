@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { useToast } from "@/components/Toast";
+import api from "@/lib/axios";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,7 @@ interface Student {
     fullName: string;
     gender?: string;
     examBatch?: number;
+    phone?: string;
 }
 
 interface Mark {
@@ -60,32 +62,22 @@ function CreateExamModal({ onClose, onCreated }: { onClose: () => void; onCreate
         if (!form.name || !form.examDate) return toast("error", "Please fill all required fields.");
         setSaving(true);
         try {
-            const token = localStorage.getItem("token");
             const staffId = localStorage.getItem("userId") || "1";
-            const res = await fetch(`http://localhost:8080/api/marks/exams/create?staffId=${staffId}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ ...form, maxMarks: parseFloat(form.maxMarks) })
-            });
-            if (res.ok) {
-                toast("success", "Examination scheduled successfully.");
-                onCreated();
-                onClose();
-            } else {
-                const msg = await res.text();
-                toast("error", msg || "Failed to create exam.");
-            }
-        } catch { toast("error", "Connection error."); } finally { setSaving(false); }
+            await api.post(`/marks/exams/create?staffId=${staffId}`, { ...form, maxMarks: parseFloat(form.maxMarks) });
+            toast("success", "Examination scheduled successfully.");
+            onCreated();
+            onClose();
+        } catch (err: any) { toast("error", err.message || "Failed to create exam."); } finally { setSaving(false); }
     };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
             <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden scale-in-center">
                 {/* Header */}
-                <div className="bg-emerald-900 px-8 py-8 text-white flex items-center justify-between">
+                <div className="bg-emerald-900 p-5 sm:px-8 sm:py-8 text-white flex items-center justify-between">
                     <div>
-                        <h2 className="text-2xl font-black tracking-tight">Schedule Examination</h2>
-                        <p className="text-emerald-300 text-sm font-medium mt-1">Create a new assessment for your batch</p>
+                        <h2 className="text-xl sm:text-2xl font-black tracking-tight">Schedule Examination</h2>
+                        <p className="text-emerald-300 text-xs sm:text-sm font-medium mt-1">Create a new assessment for your batch</p>
                     </div>
                     <button onClick={onClose} className="p-2.5 rounded-2xl hover:bg-white/10 transition-colors">
                         <X className="h-6 w-6" />
@@ -161,6 +153,14 @@ function StaffAcademicView() {
     const [view, setView] = useState<"EXAMS" | "ENTRY">("EXAMS");
     const [showCreateModal, setShowCreateModal] = useState(false);
 
+    // Helpers
+    const openWhatsApp = (phone: string, text: string) => {
+        if (!phone) return;
+        const clean = phone.replace(/\D/g, "");
+        const number = clean.startsWith("0") ? "94" + clean.slice(1) : clean;
+        window.open(`https://wa.me/${number}?text=${encodeURIComponent(text)}`, "_blank");
+    };
+
     const [exams, setExams] = useState<Exam[]>([]);
     const [students, setStudents] = useState<Student[]>([]);
     const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
@@ -175,11 +175,8 @@ function StaffAcademicView() {
     const fetchExams = async () => {
         setLoading(true);
         try {
-            const token = localStorage.getItem("token");
-            const res = await fetch(`http://localhost:8080/api/marks/exams/batch/${batch}`, {
-                headers: { "Authorization": `Bearer ${token}` }
-            });
-            if (res.ok) setExams(await res.json());
+            const res: any = await api.get(`/marks/exams/batch/${batch}`);
+            setExams(res.data || res);
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
@@ -188,14 +185,9 @@ function StaffAcademicView() {
         setMarksGrid({});
         setLoading(true);
         try {
-            const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:8080/api/students", {
-                headers: { "Authorization": `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const all: Student[] = await res.json();
-                setStudents(all.filter(s => s.examBatch?.toString() === exam.batch));
-            }
+            const res: any = await api.get("/students");
+            const all: Student[] = res.data || res;
+            setStudents(all.filter(s => s.examBatch?.toString() === exam.batch));
         } catch { toast("error", "Failed to load students."); } finally { setLoading(false); }
         setView("ENTRY");
     };
@@ -238,20 +230,24 @@ function StaffAcademicView() {
 
         setSubmitting(true);
         try {
-            const token = localStorage.getItem("token");
             const userId = localStorage.getItem("userId") || "1";
-            const res = await fetch("http://localhost:8080/api/marks/bulk-save", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ examId: selectedExam.id, staffId: userId, entries })
+            await api.post("/marks/bulk-save", { examId: selectedExam.id, staffId: userId, entries });
+
+            toast("success", `${entries.length} marks saved successfully.`);
+
+            // Open WhatsApp auto-message fallback for each entered score delay sending mildly to allow browser popups
+            entries.forEach((entry, i) => {
+                const student = students.find(s => s.studentId === entry.studentId);
+                if (student?.phone) {
+                    const grade = calculateGrade(entry.score.toString(), selectedExam.maxMarks);
+                    setTimeout(() => {
+                        openWhatsApp(student.phone!, `📊 *Result Published*\n\n${student.fullName}'s result for ${selectedExam.subject} is out.\n\nScore: ${entry.score}/${selectedExam.maxMarks}\nGrade: ${grade}\n\n— Aharam Academy`);
+                    }, i * 600); // Stagger popups so browser doesn't block them
+                }
             });
-            if (res.ok) {
-                toast("success", `${entries.length} marks saved successfully.`);
-                setView("EXAMS");
-            } else {
-                toast("error", await res.text() || "Failed to save marks.");
-            }
-        } catch { toast("error", "Connection error."); } finally { setSubmitting(false); }
+
+            setView("EXAMS");
+        } catch (err: any) { toast("error", err.message || "Failed to save marks."); } finally { setSubmitting(false); }
     };
 
     const enteredCount = Object.values(marksGrid).filter(d => d.score !== "").length;
@@ -266,17 +262,17 @@ function StaffAcademicView() {
             )}
 
             {/* Page Header */}
-            <div className="bg-white px-8 py-6 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div className="flex items-center gap-5">
-                    <div className="h-14 w-14 rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-sm shrink-0">
-                        <Award className="h-6 w-6" />
+            <div className="bg-white p-4 sm:p-6 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 sm:h-14 sm:w-14 rounded-xl sm:rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-sm shrink-0">
+                        <Award className="h-5 w-5 sm:h-6 sm:w-6" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-black text-gray-900 tracking-tight">Academic Module</h1>
-                        <p className="text-sm text-gray-400 font-medium mt-1">Subject-wise marks entry &amp; examination management</p>
+                        <h1 className="text-lg sm:text-2xl font-black text-gray-900 tracking-tight">Academic Module</h1>
+                        <p className="text-xs sm:text-sm text-gray-400 font-medium mt-0.5">Marks entry &amp; examination management</p>
                     </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-4 bg-gray-50/50 p-2 rounded-2xl border border-gray-100">
+                <div className="flex flex-wrap items-center gap-3 bg-gray-50/50 p-2 rounded-2xl border border-gray-100">
                     <select
                         disabled={view === "ENTRY"}
                         value={batch} onChange={e => setBatch(e.target.value)}
@@ -526,11 +522,8 @@ function StudentAcademicView({ username }: { username: string }) {
     useEffect(() => {
         const load = async () => {
             try {
-                const token = localStorage.getItem("token");
-                const res = await fetch(`http://localhost:8080/api/marks/student/${username}`, {
-                    headers: { "Authorization": `Bearer ${token}` }
-                });
-                if (res.ok) setMarks(await res.json());
+                const res: any = await api.get(`/marks/student/${username}`);
+                setMarks(res.data || res);
             } catch { } finally { setLoading(false); }
         };
         if (username) load();

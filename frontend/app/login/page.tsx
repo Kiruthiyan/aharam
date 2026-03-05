@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, User, Lock, ArrowLeft, AlertCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import api, { ApiResponse } from "@/lib/axios";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -23,35 +24,27 @@ export default function LoginPage() {
         setError(null);
 
         try {
-            const res = await fetch("http://localhost:8080/api/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(formData)
-            });
+            const response: any = await api.post("/auth/login", formData);
+            const data = response.data || response;
 
-            if (res.ok) {
-                const data = await res.json();
-                localStorage.setItem("token", data.token);
-                localStorage.setItem("userRole", data.role);
-                localStorage.setItem("username", data.email);
-                localStorage.setItem("name", data.displayName);
-                localStorage.setItem("userId", data.id);
+            localStorage.setItem("token", data.token);
+            localStorage.setItem("userRole", data.role);
+            localStorage.setItem("username", data.email);
+            localStorage.setItem("name", data.displayName);
+            localStorage.setItem("userId", data.id);
 
-                if (data.requirePasswordChange) {
-                    localStorage.setItem("requirePasswordChange", "true");
-                    window.location.href = "/change-password";
-                } else {
-                    if (data.role === "STUDENT") {
-                        window.location.href = "/student-dashboard";
-                    } else {
-                        window.location.href = "/dashboard";
-                    }
-                }
+            if (data.requirePasswordChange) {
+                localStorage.setItem("requirePasswordChange", "true");
+                window.location.href = "/change-password";
             } else {
-                setError(res.status === 401 ? t("loginErrorInvalid") : t("loginErrorServer"));
+                if (data.role === "STUDENT") {
+                    window.location.href = "/student-dashboard";
+                } else {
+                    window.location.href = "/dashboard";
+                }
             }
-        } catch (err) {
-            setError(t("loginErrorNetwork"));
+        } catch (err: any) {
+            setError(err.message || t("loginErrorNetwork"));
         } finally {
             setLoading(false);
         }

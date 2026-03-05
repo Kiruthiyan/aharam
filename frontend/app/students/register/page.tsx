@@ -3,23 +3,60 @@
 import AdminLayout from "@/components/AdminLayout";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Save, Loader2, CheckCircle, AlertCircle, Info, User, BookOpen, Users, ArrowLeft, Plus, GraduationCap, Briefcase, Mail, Phone, MapPin, Landmark } from "lucide-react";
+import {
+    Save, Loader2, CheckCircle, AlertCircle, User, BookOpen,
+    Users, ArrowLeft, Plus, GraduationCap, Briefcase, Mail,
+    Phone, MapPin, Landmark, Copy, Check
+} from "lucide-react";
 import clsx from "clsx";
+import api from "@/lib/axios";
 
-const SUBJECT_OPTIONS = [
-    "Physics", "Chemistry", "Combined Mathematics", "Biology", 
-    "Agricultural Science", "ICT", "Accounting", "Business Studies", 
-    "Economics", "History", "Logic", "Tamil", "English"
-];
+// ── Subject Data ───────────────────────────────────────────────────────────────
+
+const SUBJECTS: Record<string, Record<string, { core: string[]; elective?: string[] }>> = {
+    "GRADE_6_9": {
+        "TAMIL": {
+            core: ["தமிழ்", "ஆங்கிலம்", "கணிதம்", "அறிவியல்", "சுகாதாரம்", "தகவல் தொழில்நுட்பம்", "தொழில்நுட்பம்", "புவியியல்", "வரலாறு", "குடியுரிமை", "மதம்"],
+        },
+        "ENGLISH": {
+            core: ["Tamil", "English", "Mathematics", "Science", "Health", "ICT", "Technology", "Geography", "History", "Civics", "Religion"],
+        }
+    },
+    "OL_10_11": {
+        "TAMIL": {
+            core: ["தமிழ்", "ஆங்கில மொழி", "கணிதம்", "அறிவியல்", "மதம் மற்றும் ஒழுக்கக் கல்வி"],
+            elective: ["இரண்டாம் தேசிய மொழி", "தகவல் தொழில்நுட்பம்", "வரலாறு", "குடியியல் கல்வி", "உடற்கல்வி", "புவியியல்", "தொழில்நுட்பம்", "அழகியல் கல்வி", "தொழில் முயற்சி & நிதி அறிவு"],
+        },
+        "ENGLISH": {
+            core: ["Tamil", "English Language", "Mathematics", "Science", "Religion & Value Education"],
+            elective: ["Second National Language", "ICT", "History", "Civic Education", "Health & Physical Education", "Geography", "Technology", "Aesthetic Education", "Entrepreneurship & Financial Literacy"],
+        }
+    },
+    "AL": {
+        "TAMIL": {
+            core: ["கணிதம்", "இயற்பியல்", "வேதியியல்", "உயிரியல்", "இணைந்த கணிதம்", "தகவல் தொழில்நுட்பம்", "கணக்கியல்", "வணிகக் கல்வி", "பொருளாதாரம்", "வரலாறு", "தமிழ்", "ஆங்கிலம்"],
+        },
+        "ENGLISH": {
+            core: ["Mathematics", "Physics", "Chemistry", "Biology", "Combined Mathematics", "ICT", "Accounting", "Business Studies", "Economics", "History", "Tamil", "English"],
+        }
+    }
+};
+
+const GRADE_LABELS: Record<string, string> = {
+    "GRADE_6_9": "Grade 6–9 (Foundation)",
+    "OL_10_11": "Grade 10–11 (O/L)",
+    "AL": "Grade 12–13 (A/L)",
+};
 
 export default function StudentRegistration() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
-    const [success, setSuccess] = useState<string | null>(null);
+    const [success, setSuccess] = useState<{ message: string; studentId: string; password: string } | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [role, setRole] = useState<"SUPER_ADMIN" | "STAFF" | "STUDENT">("STAFF");
+    const [step, setStep] = useState(1);
+    const [copied, setCopied] = useState(false);
 
-    // Form Data
     const [formData, setFormData] = useState({
         studentId: "",
         fullName: "",
@@ -32,13 +69,13 @@ export default function StudentRegistration() {
         center: "KOKUVIL",
         medium: "TAMIL",
         examBatch: "2026",
+        gradeLevel: "OL_10_11",
         subjects: [] as string[],
         address: "",
         email: "",
         parentPhoneNumber: "",
     });
 
-    // Auto-generate ID prefix hint
     const [idHint, setIdHint] = useState("KT2026...");
 
     useEffect(() => {
@@ -48,323 +85,446 @@ export default function StudentRegistration() {
             window.location.href = "/dashboard";
             return;
         }
-        
+    }, []);
+
+    useEffect(() => {
         const c = formData.center === "KOKUVIL" ? "K" : "M";
         const m = formData.medium === "TAMIL" ? "T" : "E";
         setIdHint(`${c}${m}${formData.examBatch}xxx`);
-    }, [formData.center, formData.medium, formData.examBatch]);
+        // Clear subjects when grade level or medium changes
+        setFormData(prev => ({ ...prev, subjects: [] }));
+    }, [formData.center, formData.medium, formData.examBatch, formData.gradeLevel]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
-        if (success || error) {
-            setSuccess(null);
-            setError(null);
-        }
+        setError(null);
     };
 
     const toggleSubject = (subject: string) => {
         setFormData(prev => ({
             ...prev,
-            subjects: prev.subjects.includes(subject) 
+            subjects: prev.subjects.includes(subject)
                 ? prev.subjects.filter(s => s !== subject)
                 : [...prev.subjects, subject]
         }));
     };
 
-    const handleSubmit = async (e: React.FormEvent, redirect: boolean = true) => {
-        e.preventDefault();
+    const currentSubjects = SUBJECTS[formData.gradeLevel]?.[formData.medium] || { core: [] };
+
+    const handleSubmit = async (redirect: boolean = true) => {
+        if (!formData.fullName || !formData.fatherName || !formData.motherName || !formData.parentPhoneNumber) {
+            setError("Please fill in all required fields (marked with *).");
+            setStep(2);
+            return;
+        }
+
         setLoading(true);
-        setSuccess(null);
         setError(null);
 
-        const payload = {
-            ...formData,
-            subjects: formData.subjects.join(", ")
-        };
+        const payload = { ...formData, subjects: formData.subjects.join(", ") };
 
         try {
-            const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:8080/api/students/register", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`
-                },
-                body: JSON.stringify(payload)
-            });
+            const res: any = await api.post("/students/register", payload);
+            const newStudent = res.data || res;
+            const tempPassword = formData.fullName.toLowerCase();
+            setSuccess({ message: "Student registered successfully!", studentId: newStudent.studentId, password: tempPassword });
 
-            if (res.ok) {
-                const newStudent = await res.json();
-                const loginId = newStudent.studentId;
-                const tempPassword = formData.fullName.toLowerCase();
-                
-                setSuccess(
-                    `Success! Student registered.\n` +
-                    `Student ID: ${newStudent.studentId}\n` +
-                    `Login ID: ${loginId}\n` +
-                    `Password: ${tempPassword}`
-                );
-                
-                if (redirect) {
-                    setTimeout(() => router.push("/students"), 3500);
-                } else {
-                    setFormData(prev => ({
-                        ...prev,
-                        studentId: "",
-                        fullName: "",
-                        fatherName: "",
-                        fatherOccupation: "",
-                        motherName: "",
-                        motherOccupation: "",
-                        guardianName: "",
-                        schoolName: "",
-                        subjects: [],
-                        address: "",
-                        email: "",
-                        parentPhoneNumber: ""
-                    }));
-                    setTimeout(() => setSuccess(null), 3000);
-                }
+            if (!redirect) {
+                setFormData(prev => ({
+                    ...prev,
+                    studentId: "", fullName: "", fatherName: "", fatherOccupation: "",
+                    motherName: "", motherOccupation: "", guardianName: "", schoolName: "",
+                    subjects: [], address: "", email: "", parentPhoneNumber: ""
+                }));
+                setStep(1);
+                setTimeout(() => setSuccess(null), 6000);
             } else {
-                const msg = await res.text();
-                setError(msg || "Failed to register student");
+                setTimeout(() => router.push("/students"), 4000);
             }
-        } catch (err) {
-            setError("Network Error: Could not connect to backend");
+        } catch (err: any) {
+            setError(err.message || "Failed to register student.");
         } finally {
             setLoading(false);
         }
     };
 
+    const copyCredentials = () => {
+        if (!success) return;
+        navigator.clipboard.writeText(`Student ID: ${success.studentId}\nPassword: ${success.password}`);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const steps = ["Classification", "Student Info", "Family Details", "Subjects"];
+
+    const inputCls = "w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all placeholder:text-gray-300 font-bold text-gray-900 bg-gray-50/50 focus:bg-white text-sm";
+    const labelCls = "block text-[10px] font-black tracking-widest text-gray-400 uppercase mb-2";
+    const sectionHeadCls = "px-5 sm:px-8 py-4 border-b border-gray-100 bg-gradient-to-r from-emerald-50/60 to-transparent flex items-center gap-3";
+
     return (
         <AdminLayout userRole={role}>
-            <div className="max-w-5xl mx-auto pb-20">
+            <div className="max-w-4xl mx-auto pb-24">
+
                 {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                <div className="flex items-center gap-3 mb-6">
+                    <button onClick={() => router.back()}
+                        className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-gray-600 transition-colors shrink-0">
+                        <ArrowLeft className="h-5 w-5" />
+                    </button>
                     <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <button onClick={() => router.back()} className="p-1 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors">
-                                <ArrowLeft className="h-5 w-5" />
-                            </button>
-                            <h1 className="text-2xl font-bold text-gray-900">New Student Registration</h1>
-                        </div>
-                        <p className="text-gray-500 ml-9">Enroll a new student with complete parent and academic details.</p>
+                        <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">New Student Registration</h1>
+                        <p className="text-xs text-gray-400 font-medium mt-0.5">Enroll a student with complete academic & family details</p>
                     </div>
                 </div>
 
+                {/* Step Progress */}
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-5">
+                    <div className="flex items-center gap-1 sm:gap-2">
+                        {steps.map((s, i) => (
+                            <button key={i} onClick={() => setStep(i + 1)}
+                                className={clsx("flex-1 flex flex-col items-center gap-1 p-2 rounded-xl transition-all", step === i + 1 ? "bg-emerald-50" : "hover:bg-gray-50")}>
+                                <div className={clsx("h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-black transition-all",
+                                    step > i + 1 ? "bg-emerald-600 text-white" : step === i + 1 ? "bg-emerald-600 text-white ring-4 ring-emerald-500/20" : "bg-gray-100 text-gray-400")}>
+                                    {step > i + 1 ? <Check className="h-3.5 w-3.5" /> : i + 1}
+                                </div>
+                                <span className={clsx("text-[9px] font-black uppercase tracking-wider hidden sm:block", step === i + 1 ? "text-emerald-700" : "text-gray-400")}>
+                                    {s}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Success */}
                 {success && (
-                    <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start text-emerald-800 animate-in fade-in slide-in-from-top-4">
-                        <CheckCircle className="h-5 w-5 mr-3 mt-0.5 flex-shrink-0 text-emerald-600" />
-                        <span className="font-medium whitespace-pre-line leading-relaxed">{success}</span>
-                    </div>
-                )}
-
-                {error && (
-                    <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center text-red-800 animate-in fade-in slide-in-from-top-4">
-                        <AlertCircle className="h-5 w-5 mr-3 text-red-600" />
-                        <span className="font-medium">{error}</span>
-                    </div>
-                )}
-
-                <form className="space-y-8" onSubmit={(e) => e.preventDefault()}>
-
-                    {/* Section 1: Classification */}
-                    <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden group">
-                        <div className="px-8 py-5 border-b border-gray-100 bg-gradient-to-r from-emerald-50/50 to-transparent flex items-center gap-4">
-                            <div className="h-10 w-10 rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-sm transition-transform group-hover:scale-105">
-                                <Landmark className="h-5 w-5" />
-                            </div>
-                            <h3 className="font-black tracking-tight text-gray-900 text-lg">Academic Classification</h3>
+                    <div className="mb-5 bg-emerald-50 border border-emerald-200 rounded-2xl p-5 animate-in fade-in slide-in-from-top-4">
+                        <div className="flex items-center gap-3 mb-3">
+                            <CheckCircle className="h-6 w-6 text-emerald-600 shrink-0" />
+                            <p className="font-black text-emerald-800">{success.message}</p>
                         </div>
-                        <div className="p-8">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div className="bg-white rounded-xl p-4 border border-emerald-100 space-y-2 mt-2">
+                            <div className="flex items-center justify-between gap-4">
                                 <div>
-                                    <label className="block text-[10px] font-black tracking-widest text-gray-400 uppercase mb-3">Center</label>
-                                    <select name="center" value={formData.center} onChange={handleChange} className="w-full px-5 py-4 rounded-xl border border-gray-200 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 bg-gray-50/50 focus:bg-white transition-all font-bold text-gray-700 cursor-pointer hover:bg-gray-50">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Student ID / Login</p>
+                                    <p className="font-black text-gray-900 font-mono tracking-widest text-lg">{success.studentId}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Default Password</p>
+                                    <p className="font-black text-gray-900">{success.password}</p>
+                                </div>
+                                <button onClick={copyCredentials}
+                                    className="p-2.5 rounded-xl bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors shrink-0">
+                                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                                </button>
+                            </div>
+                            <p className="text-[10px] text-amber-600 font-bold">⚠ Share credentials with student/parent securely. Password = student name (lowercase).</p>
+                        </div>
+                        <p className="text-xs text-emerald-600 mt-3 font-medium">Redirecting to student list in 4 seconds…</p>
+                    </div>
+                )}
+
+                {/* Error */}
+                {error && (
+                    <div className="mb-5 bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3 animate-in fade-in">
+                        <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
+                        <p className="text-sm font-bold text-red-800">{error}</p>
+                    </div>
+                )}
+
+                <div className="space-y-4">
+
+                    {/* STEP 1: CLASSIFICATION */}
+                    {step === 1 && (
+                        <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden">
+                            <div className={sectionHeadCls}>
+                                <div className="h-9 w-9 rounded-xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shrink-0">
+                                    <Landmark className="h-4 w-4" />
+                                </div>
+                                <div>
+                                    <h3 className="font-black text-gray-900">Academic Classification</h3>
+                                    <p className="text-[10px] text-gray-400 font-medium">Center, medium, grade level and batch year</p>
+                                </div>
+                            </div>
+                            <div className="p-5 sm:p-8 grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                <div>
+                                    <label className={labelCls}>Center</label>
+                                    <select name="center" value={formData.center} onChange={handleChange} className={inputCls}>
                                         <option value="KOKUVIL">Kokuvil Center</option>
                                         <option value="MALLAKAM">Mallakam Center</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black tracking-widest text-gray-400 uppercase mb-3">Medium</label>
-                                    <select name="medium" value={formData.medium} onChange={handleChange} className="w-full px-5 py-4 rounded-xl border border-gray-200 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 bg-gray-50/50 focus:bg-white transition-all font-bold text-gray-700 cursor-pointer hover:bg-gray-50">
-                                        <option value="TAMIL">Tamil Medium</option>
+                                    <label className={labelCls}>Medium of Instruction</label>
+                                    <select name="medium" value={formData.medium} onChange={handleChange} className={inputCls}>
+                                        <option value="TAMIL">Tamil Medium · தமிழ் வழி</option>
                                         <option value="ENGLISH">English Medium</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black tracking-widest text-gray-400 uppercase mb-3">Exam Batch (Year)</label>
-                                    <select name="examBatch" value={formData.examBatch} onChange={handleChange} className="w-full px-5 py-4 rounded-xl border border-gray-200 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 bg-gray-50/50 focus:bg-white transition-all font-bold text-gray-700 cursor-pointer hover:bg-gray-50">
+                                    <label className={labelCls}>Grade Level</label>
+                                    <select name="gradeLevel" value={formData.gradeLevel} onChange={handleChange} className={inputCls}>
+                                        {Object.entries(GRADE_LABELS).map(([k, v]) => (
+                                            <option key={k} value={k}>{v}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className={labelCls}>Exam Batch Year</label>
+                                    <select name="examBatch" value={formData.examBatch} onChange={handleChange} className={inputCls}>
                                         {[2024, 2025, 2026, 2027, 2028, 2029, 2030].map(y => (
                                             <option key={y} value={y}>{y}</option>
                                         ))}
                                     </select>
                                 </div>
+                                <div className="sm:col-span-2 flex items-center justify-between p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                                    <div>
+                                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Auto-Generated Student ID Preview</p>
+                                        <p className="font-black font-mono text-emerald-700 tracking-widest mt-1">{idHint}</p>
+                                    </div>
+                                    <span className="text-[10px] font-black text-emerald-600 bg-emerald-100 px-3 py-1.5 rounded-full border border-emerald-200">AUTO GEN</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
 
-                    {/* Section 2: Student Basics */}
-                    <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden group">
-                        <div className="px-8 py-5 border-b border-gray-100 bg-gradient-to-r from-emerald-50/50 to-transparent flex items-center gap-4">
-                            <div className="h-10 w-10 rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-sm transition-transform group-hover:scale-105">
-                                <User className="h-5 w-5" />
-                            </div>
-                            <h3 className="font-black tracking-tight text-gray-900 text-lg">Student & Primary Info</h3>
-                        </div>
-                        <div className="p-8 space-y-8">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* STEP 2: STUDENT INFO */}
+                    {step === 2 && (
+                        <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden">
+                            <div className={sectionHeadCls}>
+                                <div className="h-9 w-9 rounded-xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shrink-0">
+                                    <User className="h-4 w-4" />
+                                </div>
                                 <div>
-                                    <label className="block text-[10px] font-black tracking-widest text-gray-400 uppercase mb-3">Internal ID (Reference)</label>
-                                    <div className="w-full px-5 py-4 rounded-xl border border-gray-200 bg-gray-50/50 text-gray-400 font-bold font-mono tracking-widest cursor-not-allowed flex justify-between items-center shadow-inner">
-                                        {idHint}
-                                        <span className="text-[10px] tracking-widest text-emerald-600 bg-emerald-100 px-3 py-1 rounded-lg border border-emerald-200 text-center">AUTO GEN</span>
+                                    <h3 className="font-black text-gray-900">Student Information</h3>
+                                    <p className="text-[10px] text-gray-400 font-medium">Personal and contact details</p>
+                                </div>
+                            </div>
+                            <div className="p-5 sm:p-8 grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                <div className="sm:col-span-2">
+                                    <label className={labelCls}>Full Name <span className="text-red-500">*</span></label>
+                                    <input name="fullName" value={formData.fullName} onChange={handleChange} required type="text"
+                                        className={inputCls} placeholder="E.g. S. Kiruthiyan" />
+                                    {formData.fullName && (
+                                        <p className="text-[10px] text-gray-400 mt-1.5 font-medium">
+                                            Default password will be: <strong className="text-emerald-700">{formData.fullName.toLowerCase()}</strong>
+                                        </p>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className={labelCls}><Mail className="h-3 w-3 inline mr-1" />Student Email</label>
+                                    <input name="email" value={formData.email} onChange={handleChange} type="email"
+                                        className={inputCls} placeholder="student@example.com" />
+                                </div>
+                                <div>
+                                    <label className={labelCls}><Landmark className="h-3 w-3 inline mr-1" />Current School</label>
+                                    <input name="schoolName" value={formData.schoolName} onChange={handleChange} type="text"
+                                        className={inputCls} placeholder="School Name" />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* STEP 3: FAMILY DETAILS */}
+                    {step === 3 && (
+                        <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden">
+                            <div className={sectionHeadCls}>
+                                <div className="h-9 w-9 rounded-xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shrink-0">
+                                    <Users className="h-4 w-4" />
+                                </div>
+                                <div>
+                                    <h3 className="font-black text-gray-900">Family & Guardian Details</h3>
+                                    <p className="text-[10px] text-gray-400 font-medium">Parents and contact information</p>
+                                </div>
+                            </div>
+                            <div className="p-5 sm:p-8 space-y-5">
+                                {/* Father */}
+                                <div className="p-4 rounded-2xl bg-gray-50/70 border border-gray-100">
+                                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">Father</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className={labelCls}>Father's Name <span className="text-red-500">*</span></label>
+                                            <input name="fatherName" value={formData.fatherName} onChange={handleChange} required
+                                                type="text" className={inputCls} placeholder="Full Name" />
+                                        </div>
+                                        <div>
+                                            <label className={labelCls}><Briefcase className="h-3 w-3 inline mr-1" />Occupation</label>
+                                            <input name="fatherOccupation" value={formData.fatherOccupation} onChange={handleChange}
+                                                type="text" className={inputCls} placeholder="Occupation" />
+                                        </div>
                                     </div>
                                 </div>
-                                <div>
-                                    <label className="block text-[10px] font-black tracking-widest text-gray-700 uppercase mb-3 flex items-center gap-2">
-                                        Full Name <span className="text-red-500 font-bold">*</span>
-                                    </label>
-                                    <input name="fullName" value={formData.fullName} onChange={handleChange} required type="text" className="w-full px-5 py-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all placeholder:text-gray-300 placeholder:font-medium font-bold text-gray-900" placeholder="E.g. S. Kiruthiyan" />
-                                </div>
-                            </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div>
-                                    <label className="block text-[10px] font-black tracking-widest text-gray-500 uppercase mb-3 flex items-center gap-2">
-                                        <Mail className="h-3.5 w-3.5 text-gray-400" /> Student Email
-                                    </label>
-                                    <input name="email" value={formData.email} onChange={handleChange} type="email" className="w-full px-5 py-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all placeholder:text-gray-300 placeholder:font-medium font-bold text-gray-900" placeholder="student@example.com" />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black tracking-widest text-gray-500 uppercase mb-3 flex items-center gap-2">
-                                        <Landmark className="h-3.5 w-3.5 text-gray-400" /> Current School
-                                    </label>
-                                    <input name="schoolName" value={formData.schoolName} onChange={handleChange} type="text" className="w-full px-5 py-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all placeholder:text-gray-300 placeholder:font-medium font-bold text-gray-900" placeholder="School Name" />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Section 3: Family Details */}
-                    <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden group">
-                        <div className="px-8 py-5 border-b border-gray-100 bg-gradient-to-r from-emerald-50/50 to-transparent flex items-center gap-4">
-                            <div className="h-10 w-10 rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-sm transition-transform group-hover:scale-105">
-                                <Users className="h-5 w-5" />
-                            </div>
-                            <h3 className="font-black tracking-tight text-gray-900 text-lg">Family & Guardian Details</h3>
-                        </div>
-                        <div className="p-8 space-y-8">
-                            {/* Father */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 rounded-[1.5rem] bg-gray-50/50 border border-gray-100">
-                                <div>
-                                    <label className="block text-[10px] font-black tracking-widest text-gray-700 uppercase mb-3">Father's Name <span className="text-red-500">*</span></label>
-                                    <input name="fatherName" value={formData.fatherName} onChange={handleChange} required type="text" className="w-full px-5 py-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all bg-white font-bold text-gray-900" placeholder="Name" />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black tracking-widest text-gray-500 uppercase mb-3 flex items-center gap-2">
-                                        <Briefcase className="h-3.5 w-3.5 text-gray-400" /> Occupation
-                                    </label>
-                                    <input name="fatherOccupation" value={formData.fatherOccupation} onChange={handleChange} type="text" className="w-full px-5 py-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all bg-white font-bold text-gray-900" placeholder="Occupation" />
-                                </div>
-                            </div>
-
-                            {/* Mother */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 rounded-[1.5rem] bg-gray-50/50 border border-gray-100">
-                                <div>
-                                    <label className="block text-[10px] font-black tracking-widest text-gray-700 uppercase mb-3">Mother's Name <span className="text-red-500">*</span></label>
-                                    <input name="motherName" value={formData.motherName} onChange={handleChange} required type="text" className="w-full px-5 py-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all bg-white font-bold text-gray-900" placeholder="Name" />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black tracking-widest text-gray-500 uppercase mb-3 flex items-center gap-2">
-                                        <Briefcase className="h-3.5 w-3.5 text-gray-400" /> Occupation
-                                    </label>
-                                    <input name="motherOccupation" value={formData.motherOccupation} onChange={handleChange} type="text" className="w-full px-5 py-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all bg-white font-bold text-gray-900" placeholder="Occupation" />
-                                </div>
-                            </div>
-
-                            {/* Contact & Address */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
-                                <div>
-                                    <label className="block text-[10px] font-black tracking-widest text-gray-700 uppercase mb-3 flex items-center gap-2">
-                                        <Phone className="h-3.5 w-3.5 text-emerald-600" /> Primary Phone Number <span className="text-red-500">*</span>
-                                    </label>
-                                    <input name="parentPhoneNumber" value={formData.parentPhoneNumber} onChange={handleChange} required type="tel" className="w-full px-5 py-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all placeholder:text-gray-300 font-bold text-gray-900" placeholder="+94 7X XXX XXXX" />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black tracking-widest text-gray-500 uppercase mb-3 flex items-center gap-2">
-                                        <MapPin className="h-3.5 w-3.5 text-gray-400" /> Home Address
-                                    </label>
-                                    <input name="address" value={formData.address} onChange={handleChange} type="text" className="w-full px-5 py-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all placeholder:text-gray-300 font-bold text-gray-900" placeholder="Street, City" />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Section 4: Subjects Grid */}
-                    <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden group">
-                        <div className="px-8 py-5 border-b border-gray-100 bg-gradient-to-r from-emerald-50/50 to-transparent flex items-center gap-4">
-                            <div className="h-10 w-10 rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-sm transition-transform group-hover:scale-105">
-                                <GraduationCap className="h-5 w-5" />
-                            </div>
-                            <h3 className="font-black tracking-tight text-gray-900 text-lg">Subject Enrollment</h3>
-                        </div>
-                        <div className="p-8">
-                            <label className="block text-xs font-bold text-gray-400 mb-5 uppercase tracking-widest">Select all subjects for this student:</label>
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                {SUBJECT_OPTIONS.map(subject => (
-                                    <button
-                                        key={subject}
-                                        type="button"
-                                        onClick={() => toggleSubject(subject)}
-                                        className={clsx(
-                                            "flex items-center justify-between px-5 py-4 rounded-[1rem] border text-sm font-black transition-all group",
-                                            formData.subjects.includes(subject)
-                                                ? "bg-emerald-50 border-emerald-500 text-emerald-700 ring-4 ring-emerald-500/10 shadow-sm"
-                                                : "bg-white border-gray-200 text-gray-500 hover:border-emerald-300 hover:bg-emerald-50/50 hover:text-emerald-700 hover:shadow-sm"
-                                        )}
-                                    >
-                                        <span>{subject}</span>
-                                        <div className={clsx(
-                                            "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300",
-                                            formData.subjects.includes(subject)
-                                                ? "bg-emerald-600 border-white text-white shadow-sm scale-110"
-                                                : "bg-gray-50 border-gray-200 group-hover:border-emerald-400 text-transparent"
-                                        )}>
-                                            <Plus className={clsx("h-4 w-4", formData.subjects.includes(subject) && "rotate-45")} />
+                                {/* Mother */}
+                                <div className="p-4 rounded-2xl bg-gray-50/70 border border-gray-100">
+                                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">Mother</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className={labelCls}>Mother's Name <span className="text-red-500">*</span></label>
+                                            <input name="motherName" value={formData.motherName} onChange={handleChange} required
+                                                type="text" className={inputCls} placeholder="Full Name" />
                                         </div>
-                                    </button>
-                                ))}
+                                        <div>
+                                            <label className={labelCls}><Briefcase className="h-3 w-3 inline mr-1" />Occupation</label>
+                                            <input name="motherOccupation" value={formData.motherOccupation} onChange={handleChange}
+                                                type="text" className={inputCls} placeholder="Occupation" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Contact */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                    <div>
+                                        <label className={labelCls}><Phone className="h-3 w-3 inline mr-1 text-emerald-600" />Primary Phone <span className="text-red-500">*</span></label>
+                                        <input name="parentPhoneNumber" value={formData.parentPhoneNumber} onChange={handleChange}
+                                            required type="tel" className={inputCls} placeholder="+94 7X XXX XXXX" />
+                                        <p className="text-[10px] text-emerald-600 font-bold mt-1.5">📱 Used for WhatsApp notifications</p>
+                                    </div>
+                                    <div>
+                                        <label className={labelCls}><MapPin className="h-3 w-3 inline mr-1" />Home Address</label>
+                                        <input name="address" value={formData.address} onChange={handleChange}
+                                            type="text" className={inputCls} placeholder="Street, City" />
+                                    </div>
+                                </div>
                             </div>
                         </div>
+                    )}
+
+                    {/* STEP 4: SUBJECTS */}
+                    {step === 4 && (
+                        <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden">
+                            <div className={sectionHeadCls}>
+                                <div className="h-9 w-9 rounded-xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shrink-0">
+                                    <BookOpen className="h-4 w-4" />
+                                </div>
+                                <div>
+                                    <h3 className="font-black text-gray-900">Subject Enrollment</h3>
+                                    <p className="text-[10px] text-gray-400 font-medium">
+                                        {GRADE_LABELS[formData.gradeLevel]} · {formData.medium === "TAMIL" ? "Tamil Medium" : "English Medium"}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="p-5 sm:p-8 space-y-6">
+                                {/* Core Subjects */}
+                                <div>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">
+                                            {formData.gradeLevel === "OL_10_11" ? "Compulsory Core Subjects" : "Core Subjects"}
+                                        </p>
+                                        <button type="button" onClick={() => {
+                                            const allCore = currentSubjects.core;
+                                            const allSelected = allCore.every(s => formData.subjects.includes(s));
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                subjects: allSelected
+                                                    ? prev.subjects.filter(s => !allCore.includes(s))
+                                                    : [...new Set([...prev.subjects, ...allCore])]
+                                            }));
+                                        }} className="text-[10px] font-black text-emerald-600 hover:text-emerald-800 uppercase tracking-wider">
+                                            {currentSubjects.core.every(s => formData.subjects.includes(s)) ? "Deselect All" : "Select All"}
+                                        </button>
+                                    </div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+                                        {currentSubjects.core.map(subject => (
+                                            <button key={subject} type="button" onClick={() => toggleSubject(subject)}
+                                                className={clsx(
+                                                    "flex items-center justify-between px-3 sm:px-4 py-3 rounded-xl border text-xs sm:text-sm font-bold transition-all text-left",
+                                                    formData.subjects.includes(subject)
+                                                        ? "bg-emerald-50 border-emerald-400 text-emerald-800 ring-2 ring-emerald-500/10"
+                                                        : "bg-white border-gray-200 text-gray-600 hover:border-emerald-300 hover:bg-emerald-50/40"
+                                                )}>
+                                                <span className="truncate">{subject}</span>
+                                                <div className={clsx("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ml-2 transition-all",
+                                                    formData.subjects.includes(subject)
+                                                        ? "bg-emerald-600 border-emerald-600 text-white"
+                                                        : "border-gray-300"
+                                                )}>
+                                                    {formData.subjects.includes(subject) && <Check className="h-3 w-3" />}
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Elective Subjects (O/L only) */}
+                                {currentSubjects.elective && (
+                                    <div>
+                                        <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3">
+                                            Elective Stream Subjects (Optional)
+                                        </p>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+                                            {currentSubjects.elective.map(subject => (
+                                                <button key={subject} type="button" onClick={() => toggleSubject(subject)}
+                                                    className={clsx(
+                                                        "flex items-center justify-between px-3 sm:px-4 py-3 rounded-xl border text-xs sm:text-sm font-bold transition-all text-left",
+                                                        formData.subjects.includes(subject)
+                                                            ? "bg-blue-50 border-blue-400 text-blue-800 ring-2 ring-blue-500/10"
+                                                            : "bg-white border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50/40"
+                                                    )}>
+                                                    <span className="truncate">{subject}</span>
+                                                    <div className={clsx("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ml-2 transition-all",
+                                                        formData.subjects.includes(subject)
+                                                            ? "bg-blue-600 border-blue-600 text-white"
+                                                            : "border-gray-300"
+                                                    )}>
+                                                        {formData.subjects.includes(subject) && <Check className="h-3 w-3" />}
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {formData.subjects.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 p-3 bg-emerald-50 rounded-xl border border-emerald-100">
+                                        <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest w-full mb-1">
+                                            {formData.subjects.length} Subject{formData.subjects.length !== 1 ? "s" : ""} Selected
+                                        </p>
+                                        {formData.subjects.map(s => (
+                                            <span key={s} className="text-[10px] font-bold bg-white text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-full">
+                                                {s}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+
+                {/* Sticky Action Bar */}
+                <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-gray-100 shadow-2xl px-4 py-3 flex items-center justify-between gap-3">
+                    <button type="button" onClick={() => setStep(s => Math.max(1, s - 1))} disabled={step === 1}
+                        className="px-4 py-3 rounded-xl border border-gray-200 text-gray-600 text-sm font-bold hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+                        ← Back
+                    </button>
+
+                    <div className="flex items-center gap-1.5">
+                        {steps.map((_, i) => (
+                            <div key={i} className={clsx("h-1.5 rounded-full transition-all", step === i + 1 ? "w-6 bg-emerald-600" : step > i + 1 ? "w-3 bg-emerald-400" : "w-3 bg-gray-200")} />
+                        ))}
                     </div>
 
-                    {/* Action Bar */}
-                    <div className="flex items-center justify-end gap-4 pt-6 sticky bottom-6 z-10 w-full">
-                        {success && (
-                            <p className="text-emerald-600 font-bold text-sm tracking-wide mr-auto animate-pulse">✓ Saved successfuly</p>
-                        )}
-                        <button
-                            type="button"
-                            onClick={(e) => handleSubmit(e, false)}
-                            disabled={loading}
-                            className="bg-white border-2 border-emerald-100 text-emerald-700 hover:bg-emerald-50 px-8 py-4 rounded-2xl font-black text-sm tracking-widest uppercase transition-all flex items-center gap-3 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            <Plus className="h-5 w-5" />
-                            Register & Next
+                    {step < 4 ? (
+                        <button type="button" onClick={() => setStep(s => Math.min(4, s + 1))}
+                            className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-black transition-all shadow-lg shadow-emerald-900/10">
+                            Next →
                         </button>
-                        <button
-                            type="button"
-                            onClick={(e) => handleSubmit(e, true)}
-                            disabled={loading}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-10 py-4 rounded-2xl font-black text-sm tracking-widest uppercase shadow-lg shadow-emerald-900/20 hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center gap-3 focus:ring-4 focus:ring-emerald-500/30 outline-none border-2 border-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {loading ? <Loader2 className="animate-spin h-5 w-5" /> : <Save className="h-5 w-5" />}
-                            Register Complete
-                        </button>
-                    </div>
+                    ) : (
+                        <div className="flex gap-2">
+                            <button type="button" onClick={() => handleSubmit(false)} disabled={loading}
+                                className="px-4 py-3 rounded-xl border-2 border-emerald-200 text-emerald-700 text-sm font-black hover:bg-emerald-50 transition-all disabled:opacity-50">
+                                <Plus className="h-4 w-4 inline mr-1" />Next
+                            </button>
+                            <button type="button" onClick={() => handleSubmit(true)} disabled={loading}
+                                className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-black transition-all shadow-lg shadow-emerald-900/10 disabled:opacity-50 flex items-center gap-2">
+                                {loading ? <Loader2 className="animate-spin h-4 w-4" /> : <Save className="h-4 w-4" />}
+                                Register
+                            </button>
+                        </div>
+                    )}
+                </div>
 
-                </form>
             </div>
         </AdminLayout>
     );

@@ -7,8 +7,11 @@ import lombok.AllArgsConstructor;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.SQLRestriction;
+
 @Entity
 @Table(name = "students")
+@SQLRestriction("deleted_at IS NULL")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -64,6 +67,11 @@ public class Student {
     @Column(nullable = false)
     private String parentPhoneNumber;
 
+    private String whatsappNumber;
+
+    @Column(nullable = false, columnDefinition = "varchar(2) default 'EN'")
+    private String languagePreference = "EN"; // EN or TA
+
     private LocalDate admissionDate;
 
     @Enumerated(EnumType.STRING)
@@ -78,6 +86,8 @@ public class Student {
     private LocalDateTime createdAt = LocalDateTime.now();
 
     private LocalDateTime updatedAt = LocalDateTime.now();
+
+    private LocalDateTime deletedAt;
 
     @PreUpdate
     protected void onUpdate() {

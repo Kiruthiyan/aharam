@@ -18,6 +18,8 @@ public class FeeService {
     @Autowired
     private FeeLogRepository feeLogRepository;
     @Autowired
+    private NotificationService notificationService;
+    @Autowired
     private StudentRepository studentRepository;
     @Autowired
     private UserRepository userRepository;
@@ -79,10 +81,18 @@ public class FeeService {
         FeeLog log = new FeeLog();
         log.setFee(fee);
         log.setOldStatus(oldStatus);
-        log.setNewStatus(newStatus);
-        log.setChangedBy(staff);
         log.setMethod(method);
         feeLogRepository.save(log);
+
+        // Send Notification if status actually changed
+        if (oldStatus != newStatus) {
+            String emoji = newStatus == FeeStatus.PAID ? "✅" : "⏳";
+            notificationService.sendToUser(
+                    studentId,
+                    emoji + " Fee Update: " + month + " " + academicYear,
+                    student.getFullName() + "'s fee for " + month + " is now " + newStatus + ".",
+                    "FEES");
+        }
 
         return fee;
     }

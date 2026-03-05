@@ -1,8 +1,8 @@
 package com.aharam.tuition.controller;
 
+import com.aharam.tuition.dto.ApiResponse;
 import com.aharam.tuition.dto.JwtResponse;
 import com.aharam.tuition.dto.LoginRequest;
-import com.aharam.tuition.dto.MessageResponse;
 import com.aharam.tuition.dto.SignupRequest;
 import com.aharam.tuition.dto.ChangePasswordRequest;
 import com.aharam.tuition.entity.Role;
@@ -59,7 +59,7 @@ public class AuthController {
 
         if (user != null) {
             if (!user.isActive()) {
-                return ResponseEntity.status(401).body(new MessageResponse("Account is inactive."));
+                return ResponseEntity.status(401).body(ApiResponse.error("Account is inactive.", "ACCOUNT_INACTIVE"));
             }
         }
 
@@ -72,23 +72,25 @@ public class AuthController {
 
             String displayName = user != null ? user.getFullName() : loginRequest.getUsername();
 
-            return ResponseEntity.ok(new JwtResponse(
+            JwtResponse resp = new JwtResponse(
                     jwt,
                     user != null ? user.getId() : 0L,
                     user != null ? user.getEmail() : loginRequest.getUsername(),
                     displayName,
                     user != null ? user.getRole().name() : "",
-                    user != null ? user.isPasswordChangeRequired() : false));
+                    user != null ? user.isPasswordChangeRequired() : false);
+
+            return ResponseEntity.ok(ApiResponse.success(resp, "Login successful"));
 
         } catch (Exception e) {
-            return ResponseEntity.status(401).body(new MessageResponse("Invalid credentials"));
+            return ResponseEntity.status(401).body(ApiResponse.error("Invalid credentials", "AUTH_FAILED"));
         }
     }
 
     @PostMapping("/signup")
     public ResponseEntity<?> registerUser(@RequestBody SignupRequest signUpRequest) {
         if (userRepository.existsByEmail(signUpRequest.getEmail())) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: Email is already taken!"));
+            return ResponseEntity.badRequest().body(ApiResponse.error("Email is already taken!", "EMAIL_EXISTS"));
         }
 
         User user = new User();
@@ -107,7 +109,7 @@ public class AuthController {
         user.setPasswordChangeRequired(true);
 
         userRepository.save(user);
-        return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
+        return ResponseEntity.ok(ApiResponse.success(null, "User registered successfully!"));
     }
 
     @PostMapping("/change-password")
@@ -116,14 +118,14 @@ public class AuthController {
                 .orElseThrow(() -> new RuntimeException("Error: User not found."));
 
         if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: Incorrect old password!"));
+            return ResponseEntity.badRequest().body(ApiResponse.error("Incorrect old password!", "INVALID_PASSWORD"));
         }
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         user.setPasswordChangeRequired(false);
         userRepository.save(user);
 
-        return ResponseEntity.ok(new MessageResponse("Password changed successfully!"));
+        return ResponseEntity.ok(ApiResponse.success(null, "Password changed successfully!"));
     }
 
     // --- FORGOT PASSWORD OTP FLOW ---
@@ -132,7 +134,8 @@ public class AuthController {
         String email = request.get("email");
         User user = userRepository.findByEmail(email).orElse(null);
         if (user == null) {
-            return ResponseEntity.badRequest().body("No account found with that email address.");
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("No account found with that email address.", "USER_NOT_FOUND"));
         }
 
         String otp = generateOtp();
@@ -142,7 +145,7 @@ public class AuthController {
 
         emailService.sendOtpEmail(email, otp, "Password Reset");
 
-        return ResponseEntity.ok("Password reset OTP sent to " + email);
+        return ResponseEntity.ok(ApiResponse.success(null, "Password reset OTP sent to " + email));
     }
 
     @PostMapping("/verify-otp")
@@ -152,16 +155,18 @@ public class AuthController {
 
         User user = userRepository.findByEmail(email).orElse(null);
         if (user == null) {
-            return ResponseEntity.badRequest().body("No account found with that email address.");
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("No account found with that email address.", "USER_NOT_FOUND"));
         }
         if (user.getPasswordResetToken() == null || !user.getPasswordResetToken().equals(otp)) {
-            return ResponseEntity.badRequest().body("Invalid OTP.");
+            return ResponseEntity.badRequest().body(ApiResponse.error("Invalid OTP.", "INVALID_OTP"));
         }
         if (user.getPasswordResetExpires() == null || LocalDateTime.now().isAfter(user.getPasswordResetExpires())) {
-            return ResponseEntity.badRequest().body("OTP has expired. Please request a new one.");
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("OTP has expired. Please request a new one.", "EXPIRED_OTP"));
         }
 
-        return ResponseEntity.ok("OTP verified successfully.");
+        return ResponseEntity.ok(ApiResponse.success(null, "OTP verified successfully."));
     }
 
     @PostMapping("/reset-password")
@@ -172,13 +177,15 @@ public class AuthController {
 
         User user = userRepository.findByEmail(email).orElse(null);
         if (user == null) {
-            return ResponseEntity.badRequest().body("No account found with that email address.");
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("No account found with that email address.", "USER_NOT_FOUND"));
         }
         if (user.getPasswordResetToken() == null || !user.getPasswordResetToken().equals(otp)) {
-            return ResponseEntity.badRequest().body("Invalid OTP.");
+            return ResponseEntity.badRequest().body(ApiResponse.error("Invalid OTP.", "INVALID_OTP"));
         }
         if (user.getPasswordResetExpires() == null || LocalDateTime.now().isAfter(user.getPasswordResetExpires())) {
-            return ResponseEntity.badRequest().body("OTP has expired. Please request a new one.");
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("OTP has expired. Please request a new one.", "EXPIRED_OTP"));
         }
 
         user.setPassword(passwordEncoder.encode(newPassword));
@@ -187,6 +194,7 @@ public class AuthController {
         user.setPasswordChangeRequired(false);
         userRepository.save(user);
 
-        return ResponseEntity.ok("Password reset successfully. You can now log in with your new password.");
+        return ResponseEntity.ok(
+                ApiResponse.success(null, "Password reset successfully. You can now log in with your new password."));
     }
 }

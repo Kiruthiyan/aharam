@@ -70,7 +70,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/attendance/**").hasAnyRole("SUPER_ADMIN", "STAFF")
                         .requestMatchers("/api/fees/**").hasAnyRole("SUPER_ADMIN", "STAFF")
                         .requestMatchers("/api/marks/**").hasAnyRole("SUPER_ADMIN", "STAFF")
+                        .requestMatchers("/api/notifications/**").hasAnyRole("SUPER_ADMIN", "STAFF", "STUDENT")
                         .requestMatchers("/api/student-dashboard/**").hasAnyRole("STUDENT")
+                        .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated());
 
         http.authenticationProvider(authenticationProvider());

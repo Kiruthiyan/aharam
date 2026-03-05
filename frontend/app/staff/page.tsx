@@ -2,9 +2,10 @@
 
 import AdminLayout from "@/components/AdminLayout";
 import { useState, useEffect } from "react";
-import { UserPlus, Trash2, Shield, Loader2, AlertCircle, Phone, Mail, CheckCircle, Search } from "lucide-react";
+import { UserPlus, Trash2, Shield, Loader2, AlertCircle, Phone, Mail, CheckCircle, Search, AlertTriangle, X } from "lucide-react";
 import clsx from "clsx";
 import { useToast } from "@/components/Toast";
+import api from "@/lib/axios";
 
 interface Staff {
     id: number;
@@ -31,6 +32,8 @@ export default function StaffPage() {
     const [submitLoading, setSubmitLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<Staff | null>(null);
+    const [deleteLoading, setDeleteLoading] = useState(false);
 
     useEffect(() => {
         fetchStaff();
@@ -38,14 +41,8 @@ export default function StaffPage() {
 
     const fetchStaff = async () => {
         try {
-            const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:8080/api/admin/staff", {
-                headers: { "Authorization": `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setStaffList(data);
-            }
+            const data: any = await api.get("/admin/staff");
+            setStaffList(data.data || data);
         } catch (err) {
             console.error("Failed to fetch staff", err);
         } finally {
@@ -60,20 +57,11 @@ export default function StaffPage() {
         setSuccessMsg(null);
 
         try {
-            const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:8080/api/admin/staff/send-verification-code", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ email: formData.email })
-            });
-            if (res.ok) {
-                setSuccessMsg("Verification code sent to your email!");
-                setStep(2);
-            } else {
-                setError(await res.text() || "Failed to send code");
-            }
-        } catch (err) {
-            setError("Network error");
+            await api.post("/admin/staff/send-verification-code", { email: formData.email });
+            setSuccessMsg("Verification code sent to your email!");
+            setStep(2);
+        } catch (err: any) {
+            setError(err.message || "Failed to send code");
         } finally {
             setSubmitLoading(false);
         }
@@ -86,20 +74,11 @@ export default function StaffPage() {
         setSuccessMsg(null);
 
         try {
-            const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:8080/api/admin/staff/verify-email-code", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ email: formData.email, otp: formData.otp })
-            });
-            if (res.ok) {
-                setSuccessMsg("Email verified successfully!");
-                setStep(3);
-            } else {
-                setError(await res.text() || "Invalid verification code");
-            }
-        } catch (err) {
-            setError("Network error");
+            await api.post("/admin/staff/verify-email-code", { email: formData.email, otp: formData.otp });
+            setSuccessMsg("Email verified successfully!");
+            setStep(3);
+        } catch (err: any) {
+            setError(err.message || "Invalid verification code");
         } finally {
             setSubmitLoading(false);
         }
@@ -111,48 +90,39 @@ export default function StaffPage() {
         setError(null);
 
         try {
-            const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:8080/api/admin/staff/register", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    username: formData.name, // the backend uses 'username' mapped to fullName
-                    email: formData.email,
-                    role: "staff"
-                })
+            const res: any = await api.post("/admin/staff/register", {
+                username: formData.name,
+                email: formData.email,
+                role: "staff"
             });
-
-            if (res.ok) {
-                const msg = await res.text();
-                toast("success", msg);
-                setShowModal(false);
-                setStep(1);
-                setFormData({ email: "", otp: "", name: "" });
-                fetchStaff();
-            } else {
-                setError(await res.text() || "Registration failed");
-            }
-        } catch (err) {
-            setError("Network error");
+            toast("success", res.message || "Staff Admin registered successfully!");
+            setShowModal(false);
+            setStep(1);
+            setFormData({ email: "", otp: "", name: "" });
+            fetchStaff();
+        } catch (err: any) {
+            setError(err.message || "Registration failed");
         } finally {
             setSubmitLoading(false);
         }
     };
 
-    const handleRemove = async (id: number) => {
-        if (!confirm("Are you sure you want to remove this staff admin?")) return;
+    const handleRemove = async (staff: Staff) => {
+        setDeleteTarget(staff);
+    };
+
+    const confirmRemove = async () => {
+        if (!deleteTarget) return;
+        setDeleteLoading(true);
         try {
-            const token = localStorage.getItem("token");
-            await fetch(`http://localhost:8080/api/admin/staff/${id}`, {
-                method: "DELETE",
-                headers: { "Authorization": `Bearer ${token}` }
-            });
+            await api.delete(`/admin/staff/${deleteTarget.id}`);
+            toast("success", `${deleteTarget.fullName || deleteTarget.email}'s account archived successfully.`);
             fetchStaff();
         } catch (err) {
-            console.error(err);
+            toast("error", "Failed to archive staff account.");
+        } finally {
+            setDeleteLoading(false);
+            setDeleteTarget(null);
         }
     };
 
@@ -166,20 +136,21 @@ export default function StaffPage() {
 
     return (
         <AdminLayout userRole="SUPER_ADMIN">
-            <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                        <Shield className="h-8 w-8 text-emerald-600" />
+                    <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
+                        <Shield className="h-6 w-6 sm:h-8 sm:w-8 text-emerald-600 shrink-0" />
                         Staff Management
                     </h1>
-                    <p className="text-gray-500 mt-1">Manage staff access and accounts.</p>
+                    <p className="text-sm text-gray-500 mt-1">Manage staff access and accounts.</p>
                 </div>
                 <button
                     onClick={() => setShowModal(true)}
-                    className="bg-emerald-900 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-800 transition-all shadow-lg hover:shadow-emerald-900/20 flex items-center font-medium"
+                    className="bg-emerald-900 text-white px-4 sm:px-6 py-2.5 rounded-xl hover:bg-emerald-800 transition-all shadow-lg flex items-center gap-2 font-medium text-sm shrink-0"
                 >
-                    <UserPlus className="h-5 w-5 mr-2" />
-                    Add New Staff
+                    <UserPlus className="h-4 w-4 sm:h-5 sm:w-5" />
+                    <span className="hidden sm:inline">Add New Staff</span>
+                    <span className="sm:hidden">Add Staff</span>
                 </button>
             </div>
 
@@ -187,11 +158,11 @@ export default function StaffPage() {
             {loading ? (
                 <div className="flex justify-center p-12"><Loader2 className="animate-spin h-8 w-8 text-emerald-500" /></div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                     {staffList.map((staff) => (
-                        <div key={staff.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col items-center text-center hover:shadow-md transition-shadow group">
-                            <div className="h-20 w-20 rounded-full bg-emerald-50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                                <span className="text-2xl font-bold text-emerald-700 uppercase">
+                        <div key={staff.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6 flex flex-col items-center text-center hover:shadow-md transition-shadow group">
+                            <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-emerald-50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                <span className="text-xl sm:text-2xl font-bold text-emerald-700 uppercase">
                                     {(staff.fullName || staff.email || "?").substring(0, 2)}
                                 </span>
                             </div>
@@ -204,7 +175,7 @@ export default function StaffPage() {
 
                             <div className="w-full mt-6 flex items-center justify-between border-t border-gray-50 pt-4">
                                 <button
-                                    onClick={() => handleRemove(staff.id)}
+                                    onClick={() => handleRemove(staff)}
                                     className="text-gray-400 hover:text-red-500 transition-colors text-sm flex items-center px-2 py-1 rounded-lg hover:bg-red-50"
                                 >
                                     <Trash2 className="h-4 w-4 mr-1" /> Remove
@@ -337,6 +308,42 @@ export default function StaffPage() {
                                     </div>
                                 </form>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Delete Confirmation Modal ─────────────────────────── */}
+            {deleteTarget && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setDeleteTarget(null)} />
+                    <div className="relative bg-white rounded-[2rem] shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="bg-red-50 p-6 flex flex-col items-center text-center border-b border-red-100">
+                            <div className="h-14 w-14 rounded-full bg-red-100 border-2 border-red-200 flex items-center justify-center mb-3">
+                                <AlertTriangle className="h-7 w-7 text-red-600" />
+                            </div>
+                            <h3 className="text-lg font-black text-gray-900">Archive Staff Account?</h3>
+                            <p className="text-sm text-gray-600 font-medium mt-1">
+                                <strong>{deleteTarget.fullName || deleteTarget.email}</strong> will be removed from active duty.
+                            </p>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-xs text-amber-800 font-medium">
+                                ⚠ This account will be <strong>archived</strong>, not permanently deleted.
+                                All associated records (attendance marks, fee actions) are preserved in history.
+                                Data can be restored from <a href="/data-history" className="underline font-bold">Data &amp; History</a>.
+                            </div>
+                            <div className="flex gap-3">
+                                <button onClick={() => setDeleteTarget(null)}
+                                    className="flex-1 px-4 py-3 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-black text-sm transition-colors">
+                                    Cancel
+                                </button>
+                                <button onClick={confirmRemove} disabled={deleteLoading}
+                                    className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black text-sm transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
+                                    {deleteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                    Yes, Archive
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

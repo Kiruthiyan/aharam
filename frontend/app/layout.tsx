@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Noto_Sans_Tamil } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/Toast";
+import { Toaster } from "sonner";
 import { I18nProvider } from "@/lib/i18n";
 
 const notoSansTamil = Noto_Sans_Tamil({
@@ -23,7 +24,10 @@ export default function RootLayout({
     <html lang="ta" className="h-full scroll-smooth">
       <body className={`${notoSansTamil.className} h-full bg-white text-slate-900 antialiased`}>
         <I18nProvider>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            {children}
+            <Toaster position="bottom-right" richColors />
+          </ToastProvider>
         </I18nProvider>
       </body>
     </html>

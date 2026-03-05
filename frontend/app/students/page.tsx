@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import clsx from "clsx";
+import api from "@/lib/axios";
 
 interface Student {
     studentId: string;
@@ -50,11 +51,8 @@ export default function StudentsPage() {
 
         const fetchStudents = async () => {
             try {
-                const token = localStorage.getItem("token");
-                const res = await fetch("http://localhost:8080/api/students", {
-                    headers: { "Authorization": `Bearer ${token}` }
-                });
-                if (res.ok) setStudents(await res.json());
+                const res: any = await api.get("/students");
+                setStudents(res.data || res);
             } catch (err) { console.error(err); } finally { setLoading(false); }
         };
         fetchStudents();
@@ -221,7 +219,7 @@ export default function StudentsPage() {
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-400 rounded-full translate-x-10 -translate-y-10 blur-2xl opacity-30" />
                                 <div className="absolute bottom-0 left-0 w-40 h-40 bg-teal-500 rounded-full -translate-x-10 translate-y-10 blur-2xl opacity-20" />
                             </div>
-                            
+
                             <div className="relative z-10 w-full flex flex-col items-center">
                                 <div className="h-28 w-28 rounded-full bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center text-emerald-800 font-black text-4xl border-[4px] border-emerald-800/50 shadow-2xl mb-6">
                                     {selected.fullName?.substring(0, 2).toUpperCase()}
@@ -247,7 +245,7 @@ export default function StudentsPage() {
                         </div>
 
                         {/* Right scrollable content */}
-                        <div className="flex-1 overflow-y-auto p-8 bg-white">
+                        <div className="flex-1 overflow-y-auto p-8 bg-white scrollbar-hide">
                             <div className="flex items-center justify-between mb-8 pb-4 border-b border-gray-100">
                                 <h4 className="text-xs font-black uppercase text-gray-400 tracking-[0.2em]">Detailed Record</h4>
                                 <button onClick={() => setSelected(null)} className="p-2.5 bg-gray-50 hover:bg-red-50 hover:text-red-500 rounded-xl transition-colors">
@@ -315,7 +313,7 @@ export default function StudentsPage() {
                                         <Link href="/attendance" className="bg-emerald-50 text-emerald-700 p-4 rounded-2xl font-black text-[10px] tracking-widest text-center border border-emerald-100 hover:bg-emerald-100 transition-all shadow-sm">ATTENDANCE LOG</Link>
                                         <Link href="/fees" className="bg-blue-50 text-blue-700 p-4 rounded-2xl font-black text-[10px] tracking-widest text-center border border-blue-100 hover:bg-blue-100 transition-all shadow-sm">PAYMENT HISTORY</Link>
                                     </div>
-                                    
+
                                     <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 flex flex-col items-center justify-center space-y-4 shadow-sm">
                                         <h5 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Scan Student ID</h5>
                                         <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 w-full flex justify-center overflow-hidden">
@@ -331,7 +329,7 @@ export default function StudentsPage() {
                                                 <div className="h-24 flex items-center justify-center text-gray-400 font-bold">Loading barcode...</div>
                                             )}
                                         </div>
-                                        <button 
+                                        <button
                                             onClick={() => {
                                                 const printWindow = window.open('', '_blank');
                                                 if (printWindow) {
