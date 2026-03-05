@@ -5,9 +5,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, User, Lock, ArrowLeft, AlertCircle } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 export default function LoginPage() {
     const router = useRouter();
+    const { t, lang } = useI18n();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [formData, setFormData] = useState({
@@ -21,7 +23,7 @@ export default function LoginPage() {
         setError(null);
 
         try {
-            const res = await fetch("http://localhost:8080/api/auth/signin", {
+            const res = await fetch("http://localhost:8080/api/auth/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(formData)
@@ -31,21 +33,25 @@ export default function LoginPage() {
                 const data = await res.json();
                 localStorage.setItem("token", data.token);
                 localStorage.setItem("userRole", data.role);
-                localStorage.setItem("username", data.username); // Store ID
-                localStorage.setItem("name", data.displayName); // Store Name for display
+                localStorage.setItem("username", data.email);
+                localStorage.setItem("name", data.displayName);
                 localStorage.setItem("userId", data.id);
 
                 if (data.requirePasswordChange) {
                     localStorage.setItem("requirePasswordChange", "true");
+                    window.location.href = "/change-password";
+                } else {
+                    if (data.role === "STUDENT") {
+                        window.location.href = "/student-dashboard";
+                    } else {
+                        window.location.href = "/dashboard";
+                    }
                 }
-
-                // Force navigation to ensure state refresh
-                window.location.href = "/dashboard";
             } else {
-                setError(res.status === 401 ? "தவறான பயனர் பெயர் அல்லது கடவுச்சொல் (Invalid Credentials)" : "Server Error");
+                setError(res.status === 401 ? t("loginErrorInvalid") : t("loginErrorServer"));
             }
         } catch (err) {
-            setError("இணையத் தொடர்பு இல்லை (Network Error)");
+            setError(t("loginErrorNetwork"));
         } finally {
             setLoading(false);
         }
@@ -63,11 +69,13 @@ export default function LoginPage() {
 
                 <div className="relative z-10 text-center p-12">
                     <div className="mb-8 transform hover:scale-105 transition-transform duration-300">
-                        <Image src="/logo.jpg" alt="Logo" width={150} height={150} className="rounded-full shadow-2xl border-4 border-emerald-500/30 mx-auto" />
+                        <Image src="/images/college-logo-4k.png" alt="Aharam Logo" width={150} height={150} className="rounded-full shadow-2xl border-4 border-emerald-500/30 bg-white mx-auto" />
                     </div>
-                    <h2 className="text-4xl font-bold text-white mb-4">அகரம் உயர்நிலைக் கல்லூரி</h2>
+                    <h2 className="text-4xl font-bold text-white mb-4">{t("collegeName")}</h2>
                     <p className="text-emerald-100 text-lg max-w-md mx-auto">
-                        பெற்றோர் மற்றும் ஆசிரியர்களுக்கான டிஜிட்டல் தளம். உங்கள் பிள்ளைகளின் கல்வி முன்னேற்றத்தை உடனுக்குடன் அறிந்துகொள்ளுங்கள்.
+                        {lang === "ta"
+                            ? "பெற்றோர், ஆசிரியர்கள் மற்றும் நிர்வாகிகளுக்கான டிஜிட்டல் தளம். உங்கள் பிள்ளைகளின் கல்வி முன்னேற்றத்தை உடனுக்குடன் அறிந்துகொள்ளுங்கள்."
+                            : "A secure digital platform for parents, teachers, and admins to follow each student’s progress in real time."}
                     </p>
                 </div>
             </div>
@@ -77,26 +85,26 @@ export default function LoginPage() {
                 <div className="absolute top-8 left-8">
                     <Link href="/" className="flex items-center text-gray-500 hover:text-emerald-600 transition-colors">
                         <ArrowLeft className="h-4 w-4 mr-2" />
-                        முகப்பு (Back to Home)
+                        {t("loginBackToHome")}
                     </Link>
                 </div>
 
                 <div className="sm:mx-auto sm:w-full sm:max-w-md">
                     <div className="mb-10 lg:hidden text-center">
-                        <Image src="/logo.jpg" alt="Logo" width={100} height={100} className="rounded-full mx-auto shadow-lg mb-4" />
-                        <h2 className="text-2xl font-bold text-emerald-900">அகரம் கல்லூரி</h2>
+                        <Image src="/images/college-logo-4k.png" alt="Aharam Logo" width={100} height={100} className="rounded-full mx-auto shadow-lg mb-4 bg-white" />
+                        <h2 className="text-2xl font-bold text-emerald-900">{t("collegeName")}</h2>
                     </div>
 
                     <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-                        கணக்கு நுழைவு (Login)
+                        {t("loginTitle")}
                     </h2>
                     <p className="mt-2 text-sm text-gray-600">
-                        உங்கள் பயனர் பெயர் மற்றும் கடவுச்சொல்லை உள்ளிடவும்
+                        {t("loginSubtitle")}
                     </p>
                 </div>
 
-                <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-                    <div className="bg-white py-8">
+                <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-[480px]">
+                    <div className="bg-white sm:p-10 sm:rounded-[2rem] sm:shadow-[0_8px_40px_rgba(0,0,0,0.04)] sm:border sm:border-gray-50">
                         <form className="space-y-6" onSubmit={handleSubmit}>
 
                             {error && (
@@ -108,20 +116,20 @@ export default function LoginPage() {
 
                             {/* Username */}
                             <div>
-                                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-                                    பயனர் பெயர் (User ID)
+                                <label htmlFor="username" className="block text-sm font-bold text-gray-700 mb-2">
+                                    {t("loginUsernameLabel")}
                                 </label>
-                                <div className="relative rounded-lg shadow-sm">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <User className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                                <div className="relative rounded-2xl shadow-sm group">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <User className="h-5 w-5 text-gray-400 group-focus-within:text-emerald-500 transition-colors" aria-hidden="true" />
                                     </div>
                                     <input
                                         id="username"
                                         name="username"
                                         type="text"
                                         required
-                                        className="focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-lg py-3 transition-all outline-none bg-gray-50 hover:bg-white"
-                                        placeholder="Enter your ID"
+                                        className="focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 block w-full pl-12 sm:text-sm border-gray-200 rounded-2xl py-4 transition-all outline-none bg-gray-50 font-medium hover:bg-white"
+                                        placeholder={t("loginUsernamePlaceholder")}
                                         value={formData.username}
                                         onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                                     />
@@ -130,27 +138,27 @@ export default function LoginPage() {
 
                             {/* Password */}
                             <div>
-                                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                                    கடவுச்சொல் (Password)
+                                <label htmlFor="password" className="block text-sm font-bold text-gray-700 mb-2">
+                                    {t("loginPasswordLabel")}
                                 </label>
-                                <div className="relative rounded-lg shadow-sm">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <Lock className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                                <div className="relative rounded-2xl shadow-sm group">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <Lock className="h-5 w-5 text-gray-400 group-focus-within:text-emerald-500 transition-colors" aria-hidden="true" />
                                     </div>
                                     <input
                                         id="password"
                                         name="password"
                                         type="password"
                                         required
-                                        className="focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-lg py-3 transition-all outline-none bg-gray-50 hover:bg-white"
-                                        placeholder="••••••••"
+                                        className="focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 block w-full pl-12 sm:text-sm border-gray-200 rounded-2xl py-4 transition-all outline-none bg-gray-50 font-medium hover:bg-white"
+                                        placeholder={t("loginPasswordPlaceholder")}
                                         value={formData.password}
                                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                                     />
                                 </div>
                             </div>
 
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between mt-8">
                                 <div className="flex items-center">
                                     <input
                                         id="remember-me"
@@ -159,29 +167,29 @@ export default function LoginPage() {
                                         className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded cursor-pointer"
                                     />
                                     <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900 cursor-pointer">
-                                        என்னை நினைவில் கொள்
+                                        {t("loginRememberMe")}
                                     </label>
                                 </div>
                                 <div className="text-sm">
-                                    <a href="#" className="font-medium text-emerald-600 hover:text-emerald-500 transition-colors">
-                                        கடவுச்சொல்லை மறந்தீர்களா?
-                                    </a>
+                                    <Link href="/forgot-password" className="font-medium text-emerald-600 hover:text-emerald-500 transition-colors">
+                                        {t("loginForgotPassword")}
+                                    </Link>
                                 </div>
                             </div>
 
-                            <div>
+                            <div className="pt-2">
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-lg shadow-lg text-sm font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:-translate-y-0.5"
+                                    className="w-full flex justify-center py-4 px-4 border border-transparent rounded-2xl shadow-lg shadow-emerald-600/20 text-sm font-black text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:-translate-y-0.5 tracking-wide"
                                 >
                                     {loading ? (
                                         <>
                                             <Loader2 className="animate-spin h-5 w-5 mr-2" />
-                                            உள்நுழைகிறது...
+                                            {t("loginLoading")}
                                         </>
                                     ) : (
-                                        "உள்நுழைய (Sign In)"
+                                        t("loginButton")
                                     )}
                                 </button>
                             </div>

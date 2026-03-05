@@ -1,11 +1,8 @@
 import { Platform } from 'react-native';
 
 // Central API configuration
-// We use localhost for the web browser, but the actual IP for physical devices
-export let API_BASE = 'http://10.10.26.171:8080';
-if (Platform.OS === 'web') {
-    API_BASE = 'http://127.0.0.1:8080';
-}
+// ⚠️ Change this to your local network IP when testing on a physical device
+export const API_BASE = 'http://10.10.26.171:8080';
 
 import * as SecureStore from 'expo-secure-store';
 

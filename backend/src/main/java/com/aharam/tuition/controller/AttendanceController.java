@@ -18,35 +18,37 @@ public class AttendanceController {
     @Autowired
     private AttendanceService attendanceService;
 
-    @PostMapping("/mark")
-    public ResponseEntity<?> markAttendance(@RequestBody AttendanceRequest request) {
+    @PostMapping("/mark-manual")
+    public ResponseEntity<?> markManual(@RequestBody AttendanceRequest request) {
         try {
             return ResponseEntity.ok(attendanceService.markAttendance(
                     request.getStudentId(),
-                    request.getDate(),
+                    request.getDate() != null ? request.getDate() : LocalDate.now(),
                     request.getStatus(),
-                    request.getRecordedBy()));
+                    request.getStaffId()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
-    @GetMapping("/date/{date}")
-    public ResponseEntity<List<Attendance>> getByDate(@PathVariable String date) {
-        return ResponseEntity.ok(attendanceService.getAttendanceByDate(LocalDate.parse(date)));
-    }
-
-    @GetMapping("/student/{studentId}")
-    public ResponseEntity<List<Attendance>> getByStudent(@PathVariable String studentId) {
-        return ResponseEntity.ok(attendanceService.getStudentAttendance(studentId));
-    }
-
-    @PostMapping("/bulk")
-    public ResponseEntity<?> bulkMarkAttendance(@RequestBody List<AttendanceRequest> requests) {
+    @PostMapping("/scan")
+    public ResponseEntity<?> scanBarcode(@RequestBody ScanRequest request) {
         try {
-            requests.forEach(req -> attendanceService.markAttendance(
-                    req.getStudentId(), req.getDate(), req.getStatus(), req.getRecordedBy()));
-            return ResponseEntity.ok("Bulk attendance marked successfully");
+            return ResponseEntity.ok(attendanceService.scanBarcode(
+                    request.getBarcode(),
+                    request.getStaffId(),
+                    request.getBatch(),
+                    request.getCenter()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/end-session")
+    public ResponseEntity<?> endSession(@RequestBody SessionEndRequest request) {
+        try {
+            attendanceService.autoAbsentRemainder(request.getBatch(), request.getDate(), request.getStaffId());
+            return ResponseEntity.ok("Session ended. Absent records created for remaining students.");
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
@@ -66,6 +68,21 @@ public class AttendanceController {
         private String studentId;
         private LocalDate date;
         private Attendance.AttendanceStatus status;
-        private String recordedBy;
+        private Long staffId;
+    }
+
+    @Data
+    static class ScanRequest {
+        private String barcode;
+        private Long staffId;
+        private String batch;
+        private String center;
+    }
+
+    @Data
+    static class SessionEndRequest {
+        private String batch;
+        private LocalDate date;
+        private Long staffId;
     }
 }

@@ -1,5 +1,6 @@
 package com.aharam.tuition.controller;
 
+import com.aharam.tuition.entity.Exam;
 import com.aharam.tuition.entity.Mark;
 import com.aharam.tuition.service.MarkService;
 import lombok.Data;
@@ -8,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/marks")
@@ -17,45 +19,46 @@ public class MarkController {
     @Autowired
     private MarkService markService;
 
-    @PostMapping("/add")
-    public ResponseEntity<?> addMark(@RequestBody MarkRequest request) {
+    // --- Exam Endpoints ---
+
+    @PostMapping("/exams/create")
+    public ResponseEntity<?> createExam(@RequestBody Exam exam, @RequestParam Long staffId) {
+        return ResponseEntity.ok(markService.createExam(exam, staffId));
+    }
+
+    @GetMapping("/exams/batch/{batch}")
+    public ResponseEntity<List<Exam>> getExamsByBatch(@PathVariable String batch) {
+        return ResponseEntity.ok(markService.getActiveExamsByBatch(batch));
+    }
+
+    // --- Marks Endpoints ---
+
+    @PostMapping("/bulk-save")
+    public ResponseEntity<?> bulkSaveMarks(@RequestBody BulkSaveRequest request) {
         try {
-            return ResponseEntity.ok(markService.addMark(
-                    request.getStudentId(),
-                    request.getExamName(),
-                    request.getSubject(),
-                    request.getScore(),
-                    request.getMaxScore()));
+            return ResponseEntity.ok(markService.bulkSaveMarks(
+                    request.getExamId(),
+                    request.getEntries(),
+                    request.getStaffId()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
     @GetMapping("/student/{studentId}")
-    public ResponseEntity<List<Mark>> getByStudent(@PathVariable String studentId) {
-        return ResponseEntity.ok(markService.getStudentMarks(studentId));
+    public ResponseEntity<List<Mark>> getStudentResults(@PathVariable String studentId) {
+        return ResponseEntity.ok(markService.getStudentResults(studentId));
     }
 
-    @PostMapping("/bulk")
-    public ResponseEntity<?> bulkAddMarks(@RequestBody List<MarkRequest> requests) {
-        try {
-            return ResponseEntity.ok(markService.bulkAddMarks(requests));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-
-    @GetMapping("/batch/{examName}/{batch}")
-    public ResponseEntity<List<Mark>> getBatchMarks(@PathVariable String examName, @PathVariable Integer batch) {
-        return ResponseEntity.ok(markService.getMarksByBatch(examName, batch));
+    @GetMapping("/analytics/{examId}")
+    public ResponseEntity<?> getAnalytics(@PathVariable Long examId) {
+        return ResponseEntity.ok(markService.getSubjectAnalytics(examId));
     }
 
     @Data
-    public static class MarkRequest {
-        private String studentId;
-        private String examName;
-        private String subject;
-        private Double score;
-        private Double maxScore;
+    public static class BulkSaveRequest {
+        private Long examId;
+        private Long staffId;
+        private List<Map<String, Object>> entries; // [{ "studentId": "...", "score": 85, "remarks": "..." }]
     }
 }

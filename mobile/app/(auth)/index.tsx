@@ -3,13 +3,15 @@ import { useState } from 'react';
 import { router } from 'expo-router';
 import { apiFetch } from '../../lib/api';
 import { saveAuth } from '../../lib/auth';
-import { registerForPushNotificationsAsync } from '../../lib/notifications';
+import { registerForPushNotifications } from '../../lib/notifications';
 import { LinearGradient } from 'expo-linear-gradient';
 import { User, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react-native';
+import { useLanguage } from '../../lib/i18n';
 
 const { width } = Dimensions.get('window');
 
 export default function LoginScreen() {
+    const { t } = useLanguage();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -18,7 +20,7 @@ export default function LoginScreen() {
 
     const handleLogin = async () => {
         if (!username || !password) {
-            setError('பயனர் பெயர் மற்றும் கடவுச்சொல்லை உள்ளிடவும் (Please enter username and password)');
+            setError(t('emptyFields'));
             return;
         }
 
@@ -36,21 +38,17 @@ export default function LoginScreen() {
                 await saveAuth(data);
 
                 // Register for push notifications after successful login
-                const pushToken = await registerForPushNotificationsAsync();
-                if (pushToken) {
-                    await apiFetch('/api/notifications/token', {
-                        method: 'POST',
-                        body: JSON.stringify({ token: pushToken }),
-                        token: data.token,
-                    }).catch(err => console.error("Failed to save push token:", err));
-                }
+                // It internally safely handles device/web checks and syncs with backend
+                await registerForPushNotifications(data.username).catch(err => {
+                    console.log("Push registration skipped or failed:", err);
+                });
 
                 router.replace('/(tabs)');
             } else {
-                setError('தவறான பயனர் பெயர் அல்லது கடவுச்சொல் (Invalid Credentials)');
+                setError(t('invalidCreds'));
             }
         } catch (err) {
-            setError('Network Error. Please check your connection.');
+            setError(t('networkError'));
         } finally {
             setLoading(false);
         }
@@ -75,12 +73,12 @@ export default function LoginScreen() {
                     <View style={styles.iconContainer}>
                         <ShieldCheck color="#34d399" size={48} strokeWidth={2.5} />
                     </View>
-                    <Text style={styles.title}>அகரம் கல்விக் கூடம்</Text>
-                    <Text style={styles.subtitle}>Aharam Tuition Management</Text>
+                    <Text style={styles.title}>{t('loginTitle')}</Text>
+                    <Text style={styles.subtitle}>{t('loginSub')}</Text>
                 </View>
 
                 <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Login to your account</Text>
+                    <Text style={styles.cardTitle}>{t('loginCardTitle')}</Text>
 
                     {error ? (
                         <View style={styles.errorBox}>
@@ -89,12 +87,12 @@ export default function LoginScreen() {
                     ) : null}
 
                     {/* Username Input */}
-                    <Text style={styles.label}>பயனர் பெயர் (Username / ID)</Text>
+                    <Text style={styles.label}>{t('usernameLabel')}</Text>
                     <View style={styles.inputContainer}>
                         <User color="#059669" size={20} style={styles.inputIcon} />
                         <TextInput
                             style={styles.input}
-                            placeholder="e.g. KT2026001 or admin"
+                            placeholder={t('usernameHolder')}
                             placeholderTextColor="#9ca3af"
                             value={username}
                             onChangeText={setUsername}
@@ -104,12 +102,12 @@ export default function LoginScreen() {
                     </View>
 
                     {/* Password Input */}
-                    <Text style={styles.label}>கடவுச்சொல் (Password)</Text>
+                    <Text style={styles.label}>{t('passwordLabel')}</Text>
                     <View style={styles.inputContainer}>
                         <Lock color="#059669" size={20} style={styles.inputIcon} />
                         <TextInput
                             style={styles.input}
-                            placeholder="Enter your password"
+                            placeholder={t('passwordHolder')}
                             placeholderTextColor="#9ca3af"
                             secureTextEntry={!showPassword}
                             value={password}
@@ -143,14 +141,14 @@ export default function LoginScreen() {
                             {loading ? (
                                 <ActivityIndicator color="#fff" />
                             ) : (
-                                <Text style={styles.loginBtnText}>உள்நுழைக (Sign In)</Text>
+                                <Text style={styles.loginBtnText}>{t('signInBtn')}</Text>
                             )}
                         </LinearGradient>
                     </TouchableOpacity>
                 </View>
 
                 <Text style={styles.footerText}>
-                    Secured by Aharam Tech Team
+                    {t('securedBy')}
                 </Text>
             </View>
         </KeyboardAvoidingView>

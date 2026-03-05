@@ -2,63 +2,51 @@
 
 import AdminLayout from "@/components/AdminLayout";
 import { useState, useEffect } from "react";
-import { Shield, Eye, EyeOff, Lock, User, Loader2, CheckCircle } from "lucide-react";
+import { 
+    Shield, Eye, EyeOff, Lock, User, Loader2, 
+    CheckCircle2, Mail, Key, ShieldCheck, Settings,
+    ChevronRight, LogOut, Bell, Smartphone
+} from "lucide-react";
 import { useToast } from "@/components/Toast";
 import clsx from "clsx";
 
-function getPasswordStrength(pw: string): { label: string; color: string; barColor: string; width: string } {
-    if (!pw) return { label: "", color: "text-gray-400", barColor: "bg-gray-200", width: "w-0" };
+function getPasswordStrength(pw: string) {
+    if (!pw) return { label: "", color: "text-gray-400", bg: "bg-gray-100", w: "w-0" };
     let score = 0;
     if (pw.length >= 8) score++;
     if (/[A-Z]/.test(pw)) score++;
     if (/[0-9]/.test(pw)) score++;
     if (/[^A-Za-z0-9]/.test(pw)) score++;
-    if (score <= 1) return { label: "Weak", color: "text-red-500", barColor: "bg-red-500", width: "w-1/4" };
-    if (score === 2) return { label: "Fair", color: "text-orange-500", barColor: "bg-orange-400", width: "w-2/4" };
-    if (score === 3) return { label: "Good", color: "text-blue-500", barColor: "bg-blue-500", width: "w-3/4" };
-    return { label: "Strong", color: "text-emerald-600", barColor: "bg-emerald-500", width: "w-full" };
+    
+    if (score <= 1) return { label: "Weak", color: "text-red-500", bg: "bg-red-500", w: "w-1/4" };
+    if (score === 2) return { label: "Moderate", color: "text-amber-500", bg: "bg-amber-500", w: "w-2/4" };
+    if (score === 3) return { label: "Robust", color: "text-blue-500", bg: "bg-blue-500", w: "w-3/4" };
+    return { label: "Military Grade", color: "text-emerald-600", bg: "bg-emerald-500", w: "w-full" };
 }
 
 export default function SettingsPage() {
     const { toast } = useToast();
     const [username, setUsername] = useState("");
-    const [userRole, setUserRole] = useState<"ADMIN" | "STAFF" | "PARENT">("ADMIN");
+    const [userRole, setUserRole] = useState<"SUPER_ADMIN" | "STAFF" | "STUDENT">("STAFF");
     const [oldPassword, setOldPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
-    const [showOld, setShowOld] = useState(false);
-    const [showNew, setShowNew] = useState(false);
-    const [showConfirm, setShowConfirm] = useState(false);
+    const [showPw, setShowPw] = useState<Record<string, boolean>>({});
     const [loading, setLoading] = useState(false);
-    const [requirePasswordChange, setRequirePasswordChange] = useState(false);
 
     const strength = getPasswordStrength(newPassword);
 
     useEffect(() => {
-        const storedUsername = localStorage.getItem("username") || localStorage.getItem("name") || "User";
-        const storedRole = localStorage.getItem("userRole") as any;
-        const pwdChange = localStorage.getItem("requirePasswordChange");
-        setUsername(storedUsername);
-        if (storedRole) setUserRole(storedRole);
-        if (pwdChange === "true") setRequirePasswordChange(true);
+        const storedU = localStorage.getItem("username") || localStorage.getItem("name") || "User";
+        const storedR = localStorage.getItem("userRole") as any;
+        setUsername(storedU);
+        if (storedR) setUserRole(storedR);
     }, []);
 
     const handleChangePassword = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        if (!oldPassword || !newPassword || !confirmPassword) {
-            toast("warning", "Please fill in all fields.");
-            return;
-        }
-        if (newPassword !== confirmPassword) {
-            toast("error", "New passwords do not match.");
-            return;
-        }
-        if (newPassword.length < 6) {
-            toast("warning", "New password must be at least 6 characters.");
-            return;
-        }
-
+        if (newPassword !== confirmPassword) return toast("error", "Verification failed. Passwords mismatch.");
+        
         setLoading(true);
         try {
             const token = localStorage.getItem("token");
@@ -67,193 +55,144 @@ export default function SettingsPage() {
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
                 body: JSON.stringify({ oldPassword, newPassword })
             });
-
             if (res.ok) {
-                toast("success", "Password changed successfully!");
-                localStorage.removeItem("requirePasswordChange");
-                setRequirePasswordChange(false);
+                toast("success", "Security credentials updated successfully.");
                 setOldPassword(""); setNewPassword(""); setConfirmPassword("");
             } else {
-                const errText = await res.text();
-                toast("error", errText || "Incorrect current password.");
+                toast("error", "Current password verification failed.");
             }
-        } catch {
-            toast("error", "Network error. Please try again.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const roleColors: Record<string, string> = {
-        ADMIN: "bg-purple-100 text-purple-700 border-purple-200",
-        STAFF: "bg-blue-100 text-blue-700 border-blue-200",
-        PARENT: "bg-amber-100 text-amber-700 border-amber-200",
-    };
-
-    const roleTamil: Record<string, string> = {
-        ADMIN: "நிர்வாகி",
-        STAFF: "ஆசிரியர்",
-        PARENT: "பெற்றோர்",
+        } catch { toast("error", "Network synchronization error."); } finally { setLoading(false); }
     };
 
     return (
         <AdminLayout userRole={userRole}>
-            <div className="max-w-2xl mx-auto space-y-6">
-                {/* Profile Card */}
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                    <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-4">Profile</h2>
-                    <div className="flex items-center gap-5">
-                        <div className="h-16 w-16 bg-gradient-to-br from-emerald-600 to-teal-600 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-lg border-4 border-emerald-50">
-                            {username.charAt(0).toUpperCase()}
+            <div className="max-w-5xl mx-auto space-y-10 pb-20">
+                {/* Profile Identity Card */}
+                <div className="bg-white rounded-[3rem] border border-gray-100 shadow-sm p-8 md:p-12 relative overflow-hidden flex flex-col md:flex-row items-center gap-10">
+                    <div className="absolute top-0 right-0 p-12 opacity-5"><Settings className="h-40 w-40 rotate-45" /></div>
+                    
+                    <div className="h-32 w-32 rounded-[2.5rem] bg-emerald-950 flex items-center justify-center text-white text-5xl font-black shadow-2xl border-4 border-white shrink-0 relative">
+                        {username.charAt(0).toUpperCase()}
+                        <div className="absolute -bottom-2 -right-2 h-10 w-10 bg-emerald-500 rounded-2xl border-4 border-white flex items-center justify-center shadow-lg"><ShieldCheck className="h-5 w-5 text-white" /></div>
+                    </div>
+
+                    <div className="text-center md:text-left space-y-2">
+                        <div className="flex items-center justify-center md:justify-start gap-4 flex-wrap">
+                            <h1 className="text-4xl font-black text-gray-900">{username}</h1>
+                            <span className={clsx(
+                                "px-4 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-widest border shadow-sm",
+                                userRole === "SUPER_ADMIN" ? "bg-purple-50 text-purple-700 border-purple-100" :
+                                userRole === "STAFF" ? "bg-blue-50 text-blue-700 border-blue-100" : "bg-amber-50 text-amber-700 border-amber-100"
+                            )}>{userRole}</span>
                         </div>
-                        <div>
-                            <h3 className="text-xl font-bold text-gray-900">{username}</h3>
-                            <div className="flex items-center gap-2 mt-2 flex-wrap">
-                                <span className={clsx("px-3 py-1 rounded-full text-xs font-bold border", roleColors[userRole] || roleColors.ADMIN)}>
-                                    {userRole}
-                                </span>
-                                <span className="text-xs text-gray-400">— {roleTamil[userRole] || "நிர்வாகி"}</span>
-                                <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
-                                    <CheckCircle className="h-3 w-3" /> Active Account
-                                </span>
-                            </div>
-                        </div>
+                        <p className="text-gray-400 font-medium max-w-md">Authorized personnel of Aharam TMS. Last synchronized profile update on {new Date().toLocaleDateString()}.</p>
                     </div>
                 </div>
 
-                {/* Password Change Warning */}
-                {requirePasswordChange && (
-                    <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex gap-3 items-start">
-                        <Shield className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
-                        <div>
-                            <p className="text-red-800 font-bold text-sm">Security Action Required</p>
-                            <p className="text-red-600 text-xs mt-1">You are required to change your password before continuing.</p>
-                        </div>
-                    </div>
-                )}
-
-                {/* Change Password Card */}
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                    <div className="flex items-center gap-2 mb-6">
-                        <div className="p-2 bg-emerald-50 rounded-xl">
-                            <Lock className="h-5 w-5 text-emerald-600" />
-                        </div>
-                        <div>
-                            <h2 className="font-bold text-gray-900">Change Password</h2>
-                            <p className="text-xs text-gray-400">Update your account password</p>
-                        </div>
-                    </div>
-
-                    <form onSubmit={handleChangePassword} className="space-y-5">
-                        {/* Old Password */}
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">Current Password</label>
-                            <div className="relative">
-                                <input
-                                    type={showOld ? "text" : "password"}
-                                    value={oldPassword}
-                                    onChange={e => setOldPassword(e.target.value)}
-                                    required
-                                    placeholder="Enter your current password"
-                                    className="w-full pr-10 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm bg-gray-50/50 transition-all"
-                                />
-                                <button type="button" onClick={() => setShowOld(!showOld)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
-                                    {showOld ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* New Password */}
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">New Password</label>
-                            <div className="relative">
-                                <input
-                                    type={showNew ? "text" : "password"}
-                                    value={newPassword}
-                                    onChange={e => setNewPassword(e.target.value)}
-                                    required
-                                    placeholder="Enter new password"
-                                    className="w-full pr-10 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm bg-gray-50/50 transition-all"
-                                />
-                                <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
-                                    {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                </button>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                    {/* Security Console */}
+                    <div className="lg:col-span-2 space-y-8">
+                        <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-8 md:p-10 space-y-8">
+                            <div className="flex items-center gap-4 border-b border-gray-50 pb-8">
+                                <div className="h-12 w-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600"><Key className="h-6 w-6" /></div>
+                                <div>
+                                    <h2 className="text-xl font-black text-gray-900 leading-none">Security Console</h2>
+                                    <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-widest">Credentials Management</p>
+                                </div>
                             </div>
 
-                            {/* Password Strength Meter */}
-                            {newPassword && (
-                                <div className="mt-2">
-                                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                        <div className={clsx("h-full rounded-full transition-all duration-500", strength.barColor, strength.width)} />
-                                    </div>
-                                    <div className="flex justify-between items-center mt-1">
-                                        <p className={clsx("text-xs font-bold", strength.color)}>{strength.label}</p>
-                                        <p className="text-[10px] text-gray-400">Use 8+ chars, uppercase, number & symbol</p>
+                            <form onSubmit={handleChangePassword} className="space-y-6">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Existing Password</label>
+                                    <div className="relative">
+                                        <input 
+                                            type={showPw.old ? "text" : "password"} value={oldPassword} onChange={e => setOldPassword(e.target.value)} required 
+                                            className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none text-sm font-bold transition-all"
+                                        />
+                                        <button type="button" onClick={() => setShowPw(v => ({...v, old: !v.old}))} className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-300 hover:text-emerald-600 transition-colors"><Eye className="h-5 w-5"/></button>
                                     </div>
                                 </div>
-                            )}
-                        </div>
 
-                        {/* Confirm Password */}
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm New Password</label>
-                            <div className="relative">
-                                <input
-                                    type={showConfirm ? "text" : "password"}
-                                    value={confirmPassword}
-                                    onChange={e => setConfirmPassword(e.target.value)}
-                                    required
-                                    placeholder="Confirm new password"
-                                    className={clsx(
-                                        "w-full pr-10 px-4 py-3 border rounded-xl focus:ring-2 outline-none text-sm bg-gray-50/50 transition-all",
-                                        confirmPassword && confirmPassword !== newPassword
-                                            ? "border-red-300 focus:ring-red-500 bg-red-50/30"
-                                            : "border-gray-200 focus:ring-emerald-500"
-                                    )}
-                                />
-                                <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
-                                    {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">New Passcode</label>
+                                        <div className="relative">
+                                            <input 
+                                                type={showPw.new ? "text" : "password"} value={newPassword} onChange={e => setNewPassword(e.target.value)} required 
+                                                className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none text-sm font-bold transition-all"
+                                            />
+                                            <button type="button" onClick={() => setShowPw(v => ({...v, new: !v.new}))} className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-300 hover:text-emerald-600 transition-colors"><Eye className="h-5 w-5"/></button>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Confirm Alignment</label>
+                                        <div className="relative">
+                                            <input 
+                                                type={showPw.confirm ? "text" : "password"} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required 
+                                                className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none text-sm font-bold transition-all"
+                                            />
+                                            <button type="button" onClick={() => setShowPw(v => ({...v, confirm: !v.confirm}))} className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-300 hover:text-emerald-600 transition-colors"><Eye className="h-5 w-5"/></button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {newPassword && (
+                                    <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <span className={clsx("text-[10px] font-black uppercase tracking-widest", strength.color)}>Status: {strength.label}</span>
+                                            <div className="h-1.5 w-32 bg-gray-200 rounded-full overflow-hidden">
+                                                <div className={clsx("h-full transition-all duration-500", strength.bg, strength.w)} />
+                                            </div>
+                                        </div>
+                                        <p className="text-[10px] text-gray-400 font-bold leading-relaxed uppercase tracking-tighter">Recommendation: Integrate mixed-case alpha, numeric sequences, and specialized glyphs (#@$%) for maximum shield integrity.</p>
+                                    </div>
+                                )}
+
+                                <button 
+                                    type="submit" disabled={loading}
+                                    className="w-full py-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-[2rem] font-black shadow-xl shadow-emerald-900/20 flex items-center justify-center gap-3 transition-all disabled:opacity-50"
+                                >
+                                    {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : <Shield className="h-5 w-5" />}
+                                    Synchronize Credentials
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    {/* Quick Access Sidebar */}
+                    <div className="space-y-8">
+                        <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-8 space-y-6">
+                            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 mb-6">Device Linkage</h3>
+                            
+                            <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                <div className="h-10 w-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-gray-400"><Smartphone className="h-5 w-5" /></div>
+                                <div className="flex-1">
+                                    <p className="text-xs font-black text-gray-900 leading-tight">Biometric Mobile Access</p>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Authorized Handset</p>
+                                </div>
+                                <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                            </div>
+
+                            <div className="flex items-center gap-4 p-4 border border-gray-100 rounded-2xl hover:bg-gray-50 transition-colors cursor-pointer group">
+                                <div className="h-10 w-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400 group-hover:bg-white transition-colors"><Bell className="h-5 w-5" /></div>
+                                <div className="flex-1">
+                                    <p className="text-xs font-black text-gray-900 leading-tight">Notification Schema</p>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Push & SMS Alarms</p>
+                                </div>
+                                <ChevronRight className="h-4 w-4 text-gray-300" />
+                            </div>
+
+                            <div className="pt-6 border-t border-gray-50">
+                                <button className="w-full flex items-center justify-center gap-3 py-4 text-red-500 font-black text-xs uppercase tracking-widest hover:bg-red-50 rounded-2xl transition-all">
+                                    <LogOut className="h-4 w-4" /> Terminate All Sessions
                                 </button>
                             </div>
-                            {confirmPassword && confirmPassword !== newPassword && (
-                                <p className="text-xs text-red-500 mt-1 font-medium">Passwords do not match</p>
-                            )}
-                            {confirmPassword && confirmPassword === newPassword && newPassword && (
-                                <p className="text-xs text-emerald-600 mt-1 font-medium flex items-center gap-1">
-                                    <CheckCircle className="h-3 w-3" /> Passwords match
-                                </p>
-                            )}
                         </div>
 
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all duration-200 hover:shadow-md"
-                        >
-                            {loading ? (
-                                <><Loader2 className="animate-spin h-4 w-4" /> Changing...</>
-                            ) : (
-                                <><Lock className="h-4 w-4" /> Update Password</>
-                            )}
-                        </button>
-                    </form>
-                </div>
-
-                {/* Account Info */}
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                    <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-4">Account Info</h2>
-                    <div className="space-y-3">
-                        <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                            <span className="text-sm text-gray-500 flex items-center gap-2"><User className="h-4 w-4" />Username</span>
-                            <span className="text-sm font-bold text-gray-900 font-mono bg-gray-50 px-3 py-1 rounded-lg border border-gray-100">{username}</span>
-                        </div>
-                        <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                            <span className="text-sm text-gray-500 flex items-center gap-2"><Shield className="h-4 w-4" />Role</span>
-                            <span className={clsx("text-xs font-bold px-3 py-1 rounded-full border", roleColors[userRole] || roleColors.ADMIN)}>{userRole}</span>
-                        </div>
-                        <div className="flex justify-between items-center py-2">
-                            <span className="text-sm text-gray-500">Status</span>
-                            <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><CheckCircle className="h-3 w-3" /> Active</span>
+                        <div className="bg-emerald-900 rounded-[2.5rem] p-8 text-white space-y-4">
+                            <div className="h-10 w-10 bg-white/10 rounded-xl flex items-center justify-center"><CheckCircle2 className="h-5 w-5 text-emerald-300" /></div>
+                            <h4 className="text-lg font-black leading-tight">Premium Architecture Active</h4>
+                            <p className="text-xs text-emerald-100/60 font-medium leading-relaxed">Your account is secured with multi-layer encryption and real-time monitoring. For security assistance, contact System HQ.</p>
                         </div>
                     </div>
                 </div>

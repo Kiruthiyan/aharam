@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "users")
@@ -16,8 +17,13 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(nullable = false)
+    private String fullName;
+
     @Column(unique = true, nullable = false)
-    private String username;
+    private String email;
+
+    private String phone;
 
     @Column(nullable = false)
     private String password;
@@ -26,20 +32,23 @@ public class User {
     @Column(nullable = false)
     private Role role;
 
-    // For linking to specific profiles if needed (e.g., Student ID or Staff ID)
-    // For linking to specific profiles if needed (e.g., Student ID or Staff ID)
-    private String relatedId;
-
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private UserStatus status = UserStatus.ACTIVE;
+    private boolean active = true;
 
-    @Column(name = "is_first_login", nullable = false)
-    private boolean isFirstLogin = true;
+    @Column(nullable = false)
+    private boolean passwordChangeRequired = true;
 
-    @Column(name = "failed_attempts", nullable = false)
-    private int failedAttempts = 0;
+    private String passwordResetToken;
 
-    @Column(name = "account_locked", nullable = false)
-    private boolean accountLocked = false;
+    private LocalDateTime passwordResetExpires;
+
+    @Column(updatable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    private LocalDateTime updatedAt = LocalDateTime.now();
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }

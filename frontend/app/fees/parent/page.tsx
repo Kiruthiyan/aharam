@@ -11,7 +11,7 @@ export default function FeesPage() {
     ];
 
     return (
-        <AdminLayout userRole="PARENT">
+        <AdminLayout userRole="STUDENT">
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">எனது கட்டணங்கள் (My Fees)</h1>

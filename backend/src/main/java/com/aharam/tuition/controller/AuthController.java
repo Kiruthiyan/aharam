@@ -9,8 +9,8 @@ import com.aharam.tuition.entity.Role;
 import com.aharam.tuition.entity.User;
 import com.aharam.tuition.repository.UserRepository;
 import com.aharam.tuition.repository.StudentRepository;
-import com.aharam.tuition.entity.Student;
 import com.aharam.tuition.security.JwtUtils;
+import com.aharam.tuition.service.EmailService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -20,8 +20,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -43,109 +44,67 @@ public class AuthController {
     @Autowired
     JwtUtils jwtUtils;
 
-    @PostMapping("/signin")
-    public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest) {
-        // DEBUGGING LOGS
-        System.out.println(">>> CHECKING USER: " + loginRequest.getUsername());
-        User user = userRepository.findByUsername(loginRequest.getUsername()).orElse(null);
-        if (user != null) {
-            System.out.println(">>> USER FOUND IN DB");
-            System.out.println(">>> DB PASSWORD: " + user.getPassword());
-            System.out.println(">>> RAW PASSWORD: " + loginRequest.getPassword());
-            boolean matches = passwordEncoder.matches(loginRequest.getPassword(), user.getPassword());
-            System.out.println(">>> PASSWORDS MATCH? " + matches);
+    @Autowired
+    EmailService emailService;
 
-            if (user.isAccountLocked()) {
-                System.out.println(">>> ACCOUNT LOCKED");
-                if (matches) {
-                    System.out.println(">>> CORRECT PASSWORD PROVIDED. AUTO-UNLOCKING.");
-                    user.setAccountLocked(false);
-                    user.setFailedAttempts(0);
-                    userRepository.save(user);
-                } else {
-                    return ResponseEntity.status(401).body(
-                            new MessageResponse(
-                                    "Account is locked due to too many failed attempts. Contact Super Admin."));
-                }
-            }
-            if (user.getStatus() != com.aharam.tuition.entity.UserStatus.ACTIVE) {
-                System.out.println(">>> ACCOUNT INACTIVE");
+    private String generateOtp() {
+        SecureRandom random = new SecureRandom();
+        int num = random.nextInt(900000) + 100000;
+        return String.valueOf(num);
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest) {
+        User user = userRepository.findByEmail(loginRequest.getUsername()).orElse(null);
+
+        if (user != null) {
+            if (!user.isActive()) {
                 return ResponseEntity.status(401).body(new MessageResponse("Account is inactive."));
             }
-        } else {
-            System.out.println(">>> USER NOT FOUND IN DB");
         }
 
         try {
-            // 2. Attempt Authentication
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
             String jwt = jwtUtils.generateJwtToken(authentication);
 
-            // Note: authentication.getPrincipal() returns UserDetails, NOT our entity.
-            // We already have 'user' entity from the check above.
-            // If user was null (username not found), auth manager would have thrown
-            // exceptions already.
+            String displayName = user != null ? user.getFullName() : loginRequest.getUsername();
 
-            // 3. Reset failed attempts on success
-            if (user != null) {
-                user.setFailedAttempts(0);
-                userRepository.save(user);
-            }
-
-            // Determine Display Name
-            String displayName = user.getUsername();
-            if (user.getRole() == Role.PARENT) {
-                Student student = studentRepository.findById(user.getUsername()).orElse(null);
-                if (student != null) {
-                    displayName = student.getFullName();
-                }
-            }
-
-            // 4. Return Response
             return ResponseEntity.ok(new JwtResponse(
                     jwt,
-                    user.getId(),
-                    user.getUsername(),
+                    user != null ? user.getId() : 0L,
+                    user != null ? user.getEmail() : loginRequest.getUsername(),
                     displayName,
-                    user.getRole().name(),
-                    user.isFirstLogin()));
+                    user != null ? user.getRole().name() : "",
+                    user != null ? user.isPasswordChangeRequired() : false));
 
         } catch (Exception e) {
-            System.out.println(">>> AUTHENTICATION FAILED EXCEPTION: " + e.getClass().getName());
-            System.out.println(">>> EXCEPTION MESSAGE: " + e.getMessage());
-            e.printStackTrace();
-
-            // 5. Handle Failure: Increment failed attempts
-            if (user != null) {
-                user.setFailedAttempts(user.getFailedAttempts() + 1);
-                if (user.getFailedAttempts() >= 5) {
-                    user.setAccountLocked(true);
-                }
-                userRepository.save(user);
-            }
             return ResponseEntity.status(401).body(new MessageResponse("Invalid credentials"));
         }
     }
 
     @PostMapping("/signup")
     public ResponseEntity<?> registerUser(@RequestBody SignupRequest signUpRequest) {
-        if (userRepository.existsByUsername(signUpRequest.getUsername())) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: Username is already taken!"));
+        if (userRepository.existsByEmail(signUpRequest.getEmail())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Email is already taken!"));
         }
 
-        // Create new user's account
         User user = new User();
-        user.setUsername(signUpRequest.getUsername());
+        user.setFullName(signUpRequest.getUsername());
+        user.setEmail(signUpRequest.getEmail());
         user.setPassword(passwordEncoder.encode(signUpRequest.getPassword()));
-        user.setRole(Role.STAFF); // Default
 
         String strRole = signUpRequest.getRole();
-        if (strRole != null && strRole.equals("admin")) {
-            user.setRole(Role.ADMIN);
+        if ("super_admin".equalsIgnoreCase(strRole)) {
+            user.setRole(Role.SUPER_ADMIN);
+        } else {
+            user.setRole(Role.STAFF);
         }
+
+        user.setActive(true);
+        user.setPasswordChangeRequired(true);
 
         userRepository.save(user);
         return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
@@ -153,7 +112,7 @@ public class AuthController {
 
     @PostMapping("/change-password")
     public ResponseEntity<?> changePassword(@RequestBody ChangePasswordRequest request) {
-        User user = userRepository.findByUsername(request.getUsername())
+        User user = userRepository.findByEmail(request.getUsername())
                 .orElseThrow(() -> new RuntimeException("Error: User not found."));
 
         if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
@@ -161,9 +120,73 @@ public class AuthController {
         }
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
-        user.setFirstLogin(false);
+        user.setPasswordChangeRequired(false);
         userRepository.save(user);
 
         return ResponseEntity.ok(new MessageResponse("Password changed successfully!"));
+    }
+
+    // --- FORGOT PASSWORD OTP FLOW ---
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> request) {
+        String email = request.get("email");
+        User user = userRepository.findByEmail(email).orElse(null);
+        if (user == null) {
+            return ResponseEntity.badRequest().body("No account found with that email address.");
+        }
+
+        String otp = generateOtp();
+        user.setPasswordResetToken(otp);
+        user.setPasswordResetExpires(LocalDateTime.now().plusMinutes(15));
+        userRepository.save(user);
+
+        emailService.sendOtpEmail(email, otp, "Password Reset");
+
+        return ResponseEntity.ok("Password reset OTP sent to " + email);
+    }
+
+    @PostMapping("/verify-otp")
+    public ResponseEntity<?> verifyOtp(@RequestBody Map<String, String> request) {
+        String email = request.get("email");
+        String otp = request.get("otp");
+
+        User user = userRepository.findByEmail(email).orElse(null);
+        if (user == null) {
+            return ResponseEntity.badRequest().body("No account found with that email address.");
+        }
+        if (user.getPasswordResetToken() == null || !user.getPasswordResetToken().equals(otp)) {
+            return ResponseEntity.badRequest().body("Invalid OTP.");
+        }
+        if (user.getPasswordResetExpires() == null || LocalDateTime.now().isAfter(user.getPasswordResetExpires())) {
+            return ResponseEntity.badRequest().body("OTP has expired. Please request a new one.");
+        }
+
+        return ResponseEntity.ok("OTP verified successfully.");
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> request) {
+        String email = request.get("email");
+        String otp = request.get("otp");
+        String newPassword = request.get("newPassword");
+
+        User user = userRepository.findByEmail(email).orElse(null);
+        if (user == null) {
+            return ResponseEntity.badRequest().body("No account found with that email address.");
+        }
+        if (user.getPasswordResetToken() == null || !user.getPasswordResetToken().equals(otp)) {
+            return ResponseEntity.badRequest().body("Invalid OTP.");
+        }
+        if (user.getPasswordResetExpires() == null || LocalDateTime.now().isAfter(user.getPasswordResetExpires())) {
+            return ResponseEntity.badRequest().body("OTP has expired. Please request a new one.");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setPasswordResetToken(null);
+        user.setPasswordResetExpires(null);
+        user.setPasswordChangeRequired(false);
+        userRepository.save(user);
+
+        return ResponseEntity.ok("Password reset successfully. You can now log in with your new password.");
     }
 }

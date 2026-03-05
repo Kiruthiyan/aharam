@@ -1,86 +1,101 @@
 "use client";
 
 import AdminLayout from "@/components/AdminLayout";
-import { useState, useEffect, useMemo } from "react";
-import { CreditCard, Save, Search, ChevronLeft, ChevronRight, Loader2, X } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import {
+    CreditCard, Search, Loader2, X, CheckCircle2, AlertCircle,
+    Clock, Users, Filter, Barcode, User, ZapIcon,
+    TrendingUp, BarChart3, History, Calendar, RefreshCw,
+    ChevronDown, ChevronUp
+} from "lucide-react";
 import clsx from "clsx";
 import { useToast } from "@/components/Toast";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+const MONTHS = ["January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"];
 
 interface Student {
     studentId: string;
     fullName: string;
     examBatch?: number;
+    gender?: string;
     center?: string;
-    medium?: string;
 }
 
 interface FeeRecord {
-    id?: number;
-    studentId?: string;
-    student?: { studentId: string };
+    id: number;
+    student?: Student;
     month: string;
-    amount: number;
+    academicYear: string;
     status: "PAID" | "PENDING";
+    updateMethod?: "BARCODE" | "MANUAL";
+    updatedBy?: { fullName: string };
+    updatedAt?: string;
 }
 
-const MONTHS = ["January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"];
+// ── Shared Components ─────────────────────────────────────────────────────────
 
-// Fee Entry Modal — replaces browser prompt()
-function FeeModal({
-    studentName, monthFull, onConfirm, onCancel
-}: {
-    studentName: string;
-    monthFull: string;
-    onConfirm: (amount: number, notes: string) => void;
-    onCancel: () => void;
-}) {
-    const [amount, setAmount] = useState("1500");
-    const [notes, setNotes] = useState("");
-
+function StatusBadge({ status }: { status: "PAID" | "PENDING" }) {
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-                <div className="p-5 bg-emerald-900 text-white relative">
-                    <h2 className="text-lg font-bold">Record Payment</h2>
-                    <p className="text-emerald-200 text-sm mt-1">{studentName} — {monthFull}</p>
-                    <button onClick={onCancel} className="absolute top-4 right-4 text-emerald-300 hover:text-white transition-colors">
-                        <X className="h-5 w-5" />
-                    </button>
+        <span className={clsx(
+            "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border",
+            status === "PAID"
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-amber-50 text-amber-700 border-amber-200"
+        )}>
+            {status === "PAID" ? <CheckCircle2 className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+            {status}
+        </span>
+    );
+}
+
+function StatCard({ title, value, sub, icon: Icon, color }: {
+    title: string; value: string | number; sub?: string; icon: any; color: string;
+}) {
+    return (
+        <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center gap-5 group hover:shadow-md transition-all">
+            <div className={clsx("h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105", color)}>
+                <Icon className="h-6 w-6" />
+            </div>
+            <div>
+                <p className="text-3xl font-black tracking-tight text-gray-900">{value}</p>
+                <p className="text-[10px] uppercase font-black text-gray-400 tracking-widest mt-1">
+                    {title}{sub && <span className="text-gray-300 ml-1 font-bold">{sub}</span>}
+                </p>
+            </div>
+        </div>
+    );
+}
+
+// ── Confirm Modal ─────────────────────────────────────────────────────────────
+
+function ConfirmModal({ student, month, year, action, onConfirm, onCancel }: {
+    student: Student; month: string; year: string; action: "PAID" | "PENDING";
+    onConfirm: () => void; onCancel: () => void;
+}) {
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
+            <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden scale-in-center">
+                <div className={clsx("p-8 text-white", action === "PAID" ? "bg-emerald-900" : "bg-amber-700")}>
+                    <div className="h-14 w-14 rounded-2xl bg-white/10 flex items-center justify-center mb-5 border border-white/20">
+                        {action === "PAID" ? <CheckCircle2 className="h-7 w-7" /> : <Clock className="h-7 w-7" />}
+                    </div>
+                    <h2 className="text-2xl font-black tracking-tight">Confirm Fee Update</h2>
+                    <p className="text-sm opacity-80 mt-2 font-medium">{student.fullName} — {month} {year}</p>
                 </div>
-                <div className="p-5 space-y-4">
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">Fee Amount (Rs.)</label>
-                        <input
-                            type="number"
-                            value={amount}
-                            onChange={e => setAmount(e.target.value)}
-                            className="w-full px-4 py-3 text-lg font-bold border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
-                            autoFocus
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">Notes (Optional)</label>
-                        <input
-                            type="text"
-                            value={notes}
-                            onChange={e => setNotes(e.target.value)}
-                            placeholder="e.g. Partial payment, cheque no."
-                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
-                        />
-                    </div>
-                    <div className="flex gap-3 pt-1">
-                        <button onClick={onCancel} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors">
-                            Cancel
-                        </button>
-                        <button
-                            onClick={() => {
-                                const amt = parseFloat(amount);
-                                if (!isNaN(amt) && amt > 0) onConfirm(amt, notes);
-                            }}
-                            className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-sm transition-colors"
-                        >
-                            Record Payment
+                <div className="p-8">
+                    <p className="text-gray-600 font-medium mb-8 leading-relaxed">
+                        You are marking this fee as <strong className={action === "PAID" ? "text-emerald-700" : "text-amber-700"}>{action}</strong>. This action will be logged with your staff ID.
+                    </p>
+                    <div className="flex gap-4">
+                        <button onClick={onCancel} className="flex-1 py-4 border-2 border-gray-100 rounded-2xl font-black text-gray-500 hover:bg-gray-50 hover:border-gray-200 transition-all tracking-wide">Cancel</button>
+                        <button onClick={onConfirm} className={clsx(
+                            "flex-1 py-4 rounded-2xl font-black text-white shadow-lg transition-all tracking-wide hover:-translate-y-0.5",
+                            action === "PAID" ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-900/20" : "bg-amber-600 hover:bg-amber-700 shadow-amber-900/20"
+                        )}>
+                            Confirm {action}
                         </button>
                     </div>
                 </div>
@@ -89,373 +104,687 @@ function FeeModal({
     );
 }
 
-function StaffFeesView({ username }: { username: string }) {
-    const { toast } = useToast();
-    const [students, setStudents] = useState<Student[]>([]);
-    const [feeData, setFeeData] = useState<Record<string, Record<string, FeeRecord>>>({});
-    const [loading, setLoading] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
-    const [modal, setModal] = useState<{ studentId: string; studentName: string; monthFull: string } | null>(null);
+// ── STAFF VIEW ────────────────────────────────────────────────────────────────
 
-    const [selectedYear, setSelectedYear] = useState("2025");
-    const [selectedBatch, setSelectedBatch] = useState("2026");
-    const [selectedCenter, setSelectedCenter] = useState("ALL");
-    const [searchTerm, setSearchTerm] = useState("");
+function StaffFeesView({ staffId }: { staffId: string }) {
+    const { toast } = useToast();
+    const barcodeRef = useRef<HTMLInputElement>(null);
+    const searchRef = useRef<HTMLInputElement>(null);
+
+    // Config
+    const [month, setMonth] = useState(MONTHS[new Date().getMonth()]);
+    const [year, setYear] = useState(String(new Date().getFullYear()));
+    const [batch, setBatch] = useState("2026");
+
+    // State
+    const [barcodeValue, setBarcodeValue] = useState("");
+    const [sessionActive, setSessionActive] = useState(false);
+    const [loadingBarcode, setLoadingBarcode] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [allStudents, setAllStudents] = useState<Student[]>([]);
+    const [batchFees, setBatchFees] = useState<FeeRecord[]>([]);
+    const [loadingData, setLoadingData] = useState(false);
+    const [confirm, setConfirm] = useState<{ student: Student; action: "PAID" | "PENDING" } | null>(null);
+    const [markingId, setMarkingId] = useState<string | null>(null);
+
+    // Recent barcode results
+    const [recentScans, setRecentScans] = useState<FeeRecord[]>([]);
+
+    // Active tab
+    const [tab, setTab] = useState<"BARCODE" | "SEARCH" | "BATCH">("BARCODE");
 
     useEffect(() => {
-        const loadData = async () => {
-            setLoading(true);
+        if (sessionActive && barcodeRef.current) barcodeRef.current.focus();
+    }, [sessionActive]);
+
+    // Load students + batch fees
+    useEffect(() => {
+        const load = async () => {
+            setLoadingData(true);
             try {
                 const token = localStorage.getItem("token");
-                const headers = { "Authorization": `Bearer ${token}` };
-                const resStudents = await fetch("http://localhost:8080/api/students", { headers });
-                const studentsData: Student[] = await resStudents.json();
-                setStudents(studentsData);
-
-                const resFees = await fetch(`http://localhost:8080/api/fees/batch/${selectedBatch}`, { headers });
-                if (resFees.ok) {
-                    const data: any[] = await resFees.json();
-                    const grid: Record<string, Record<string, FeeRecord>> = {};
-                    data.forEach(r => {
-                        const sId = r.student?.studentId || r.studentId;
-                        const m = r.month;
-                        if (m.includes(selectedYear)) {
-                            if (!grid[sId]) grid[sId] = {};
-                            grid[sId][m] = r;
-                        }
-                    });
-                    setFeeData(grid);
-                } else setFeeData({});
-            } catch (e) { console.error(e); } finally { setLoading(false); }
+                const [sRes, fRes] = await Promise.all([
+                    fetch("http://localhost:8080/api/students", { headers: { "Authorization": `Bearer ${token}` } }),
+                    fetch(`http://localhost:8080/api/fees/batch/${batch}?month=${month}&academicYear=${year}`, { headers: { "Authorization": `Bearer ${token}` } })
+                ]);
+                if (sRes.ok) setAllStudents((await sRes.json()).filter((s: Student) => s.examBatch?.toString() === batch));
+                if (fRes.ok) setBatchFees(await fRes.json());
+            } catch { } finally { setLoadingData(false); }
         };
-        loadData();
-    }, [selectedBatch, selectedYear]);
+        load();
+    }, [batch, month, year]);
 
-    const filteredStudents = useMemo(() => {
-        return students.filter(s => {
-            const matchesSearch = s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || s.studentId.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesBatch = (s.examBatch?.toString() || "") === selectedBatch;
-            const matchesCenter = selectedCenter === "ALL" || s.center === selectedCenter;
-            return matchesSearch && matchesBatch && matchesCenter;
-        }).sort((a, b) => a.studentId.localeCompare(b.studentId));
-    }, [students, searchTerm, selectedBatch, selectedCenter]);
-
-    const handleCellClick = (student: Student, monthFull: string) => {
-        if (feeData[student.studentId]?.[monthFull]) return; // Already paid
-        setModal({ studentId: student.studentId, studentName: student.fullName, monthFull });
-    };
-
-    const handleModalConfirm = (amount: number, notes: string) => {
-        if (!modal) return;
-        setFeeData(prev => ({
-            ...prev,
-            [modal.studentId]: {
-                ...(prev[modal.studentId] || {}),
-                [modal.monthFull]: {
-                    studentId: modal.studentId,
-                    month: modal.monthFull,
-                    amount,
-                    status: "PAID"
-                }
-            }
-        }));
-        setModal(null);
-        toast("info", `Payment of Rs. ${amount} recorded for ${modal.studentName}. Click Save to commit.`);
-    };
-
-    const handleSave = async () => {
-        const payload: any[] = [];
-        for (const studentId in feeData) {
-            for (const month in feeData[studentId]) {
-                const record = feeData[studentId][month];
-                if (!record.id) {
-                    payload.push({ studentId, month: record.month, amount: record.amount, recordedBy: username });
-                }
-            }
-        }
-        if (payload.length === 0) { toast("warning", "No new payments to save."); return; }
-
-        setSubmitting(true);
+    // Barcode scan
+    const handleScan = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!barcodeValue.trim()) return;
+        setLoadingBarcode(true);
         try {
             const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:8080/api/fees/bulk", {
+            const res = await fetch("http://localhost:8080/api/fees/scan", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({ barcode: barcodeValue.trim(), month, academicYear: year, staffId: parseInt(staffId) })
             });
             if (res.ok) {
-                toast("success", `${payload.length} payment(s) saved successfully!`);
-                // Update local records with "committed" flag by re-fetching
-                setTimeout(() => window.location.reload(), 1500);
-            } else toast("error", "Failed to save payments. Please try again.");
-        } catch (e) { toast("error", "Network error. Please try again."); } finally { setSubmitting(false); }
+                const rec: FeeRecord = await res.json();
+                setRecentScans(prev => [rec, ...prev.slice(0, 9)]);
+                setBatchFees(prev => [rec, ...prev.filter(f => f.student?.studentId !== rec.student?.studentId)]);
+                toast("success", `✔ ${rec.student?.fullName} — Fee PAID for ${month}`);
+                setBarcodeValue("");
+                barcodeRef.current?.focus();
+            } else {
+                const msg = await res.text();
+                if (msg.includes("already marked")) {
+                    toast("info", msg);
+                } else {
+                    toast("error", msg || "Student not found.");
+                }
+                setBarcodeValue("");
+                barcodeRef.current?.focus();
+            }
+        } catch { toast("error", "Connection error."); } finally { setLoadingBarcode(false); }
     };
 
-    // Monthly totals
-    const monthlyTotals = useMemo(() => {
-        const totals: Record<string, number> = {};
-        MONTHS.forEach(m => {
-            const monthFull = `${m} ${selectedYear}`;
-            let total = 0;
-            filteredStudents.forEach(s => {
-                if (feeData[s.studentId]?.[monthFull]) total += feeData[s.studentId][monthFull].amount || 0;
+    // Manual mark
+    const doManualMark = async (studentId: string, action: "PAID" | "PENDING") => {
+        setMarkingId(studentId + action);
+        try {
+            const token = localStorage.getItem("token");
+            const res = await fetch("http://localhost:8080/api/fees/manual", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify({ studentId, month, academicYear: year, status: action, staffId: parseInt(staffId) })
             });
-            totals[m] = total;
-        });
-        return totals;
-    }, [feeData, filteredStudents, selectedYear]);
+            if (res.ok) {
+                const rec: FeeRecord = await res.json();
+                setBatchFees(prev => [rec, ...prev.filter(f => f.student?.studentId !== rec.student?.studentId)]);
+                toast("success", `${action}: ${rec.student?.fullName}`);
+                setConfirm(null);
+            } else {
+                toast("error", await res.text() || "Failed to update.");
+            }
+        } catch { toast("error", "Connection error."); } finally { setMarkingId(null); }
+    };
 
-    const totalCollected = Object.values(monthlyTotals).reduce((a, b) => a + b, 0);
-    const paidCount = filteredStudents.filter(s => {
-        return MONTHS.some(m => !!feeData[s.studentId]?.[`${m} ${selectedYear}`]);
-    }).length;
+    // Map of studentId -> fee record for batch view
+    const feeMap = useMemo(() => {
+        const m: Record<string, FeeRecord> = {};
+        batchFees.forEach(f => { if (f.student?.studentId) m[f.student.studentId] = f; });
+        return m;
+    }, [batchFees]);
+
+    const searchResults = useMemo(() => {
+        if (!searchQuery.trim()) return [];
+        const q = searchQuery.toLowerCase();
+        return allStudents.filter(s =>
+            s.fullName.toLowerCase().includes(q) || s.studentId.toLowerCase().includes(q)
+        ).slice(0, 8);
+    }, [searchQuery, allStudents]);
+
+    const stats = useMemo(() => {
+        const paid = Object.values(feeMap).filter(f => f.status === "PAID").length;
+        const total = allStudents.length;
+        return { paid, pending: total - paid, total };
+    }, [feeMap, allStudents]);
 
     return (
-        <div className="flex flex-col gap-4">
-            {/* Fee Modal */}
-            {modal && (
-                <FeeModal
-                    studentName={modal.studentName}
-                    monthFull={modal.monthFull}
-                    onConfirm={handleModalConfirm}
-                    onCancel={() => setModal(null)}
+        <div className="max-w-7xl mx-auto space-y-6 pb-20">
+            {/* Confirm Modal */}
+            {confirm && (
+                <ConfirmModal
+                    student={confirm.student} month={month} year={year} action={confirm.action}
+                    onConfirm={() => doManualMark(confirm.student.studentId, confirm.action)}
+                    onCancel={() => setConfirm(null)}
                 />
             )}
 
-            {/* Controls */}
-            <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-                    <h1 className="text-base font-bold flex items-center gap-2 text-gray-800">
-                        <CreditCard className="h-5 w-5 text-emerald-600" />
-                        Fee Collection Register — {selectedYear}
-                    </h1>
-                    <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500">
-                        <option>2024</option><option>2025</option><option>2026</option>
+            {/* ── Page Header ─────────────────────────────────────────── */}
+            <div className="bg-white px-8 py-6 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+                <div className="flex items-center gap-5">
+                    <div className="h-14 w-14 rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-sm shrink-0">
+                        <CreditCard className="h-6 w-6" />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-black text-gray-900 tracking-tight">Fee Management</h1>
+                        <p className="text-sm text-gray-400 font-medium mt-1">Hybrid: Barcode · Search · Batch Monitor</p>
+                    </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-4 bg-gray-50/50 p-2 rounded-2xl border border-gray-100">
+                    <select value={month} onChange={e => setMonth(e.target.value)}
+                        className="bg-white border text-gray-700 border-gray-200 px-5 py-3 rounded-xl text-sm font-black outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 shadow-sm cursor-pointer transition-all hover:bg-gray-50 min-w-[140px]">
+                        {MONTHS.map(m => <option key={m}>{m}</option>)}
+                    </select>
+                    <select value={year} onChange={e => setYear(e.target.value)}
+                        className="bg-white border text-gray-700 border-gray-200 px-5 py-3 rounded-xl text-sm font-black outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 shadow-sm cursor-pointer transition-all hover:bg-gray-50 min-w-[120px]">
+                        {["2024", "2025", "2026", "2027"].map(y => <option key={y}>{y}</option>)}
+                    </select>
+                    <select value={batch} onChange={e => setBatch(e.target.value)}
+                        className="bg-white border text-gray-700 border-gray-200 px-5 py-3 rounded-xl text-sm font-black outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 shadow-sm cursor-pointer transition-all hover:bg-gray-50 min-w-[140px]">
+                        {["2024", "2025", "2026", "2027"].map(b => <option key={b}>Batch {b}</option>)}
                     </select>
                 </div>
-                <div className="flex flex-wrap gap-2 items-center justify-between">
-                    <div className="flex flex-wrap gap-2">
-                        <select value={selectedBatch} onChange={e => setSelectedBatch(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500">
-                            <option>2024</option><option>2025</option><option>2026</option><option>2027</option>
-                        </select>
-                        <select value={selectedCenter} onChange={e => setSelectedCenter(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500">
-                            <option value="ALL">All Centers</option><option>KOKUVIL</option><option>MALLAKAM</option>
-                        </select>
-                    </div>
-                    <div className="flex items-center gap-2 flex-1 sm:flex-none">
-                        <div className="relative flex-1 sm:flex-none">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                            <input type="text" placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-8 pr-3 py-2 w-full sm:w-48 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
-                        </div>
-                        <button onClick={handleSave} disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold shadow-sm flex items-center gap-2 disabled:opacity-50 whitespace-nowrap text-sm transition-colors">
-                            {submitting ? <Loader2 className="animate-spin h-4 w-4" /> : <Save className="h-4 w-4" />}
-                            <span className="hidden sm:inline">Save</span>
-                        </button>
-                    </div>
-                </div>
             </div>
 
-            {/* Summary */}
-            <div className="grid grid-cols-3 gap-3">
-                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-center">
-                    <p className="text-xl font-bold text-emerald-700">Rs. {totalCollected.toLocaleString()}</p>
-                    <p className="text-xs text-emerald-600 font-medium">Total Collected</p>
-                </div>
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">
-                    <p className="text-xl font-bold text-blue-700">{paidCount}</p>
-                    <p className="text-xs text-blue-600 font-medium">Students Paid</p>
-                </div>
-                <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 text-center">
-                    <p className="text-xl font-bold text-orange-600">{filteredStudents.length - paidCount}</p>
-                    <p className="text-xs text-orange-500 font-medium">Pending</p>
-                </div>
+            {/* ── Stats ───────────────────────────────────────────────── */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                <StatCard title="Completion" value={stats.total > 0 ? Math.round((stats.paid / stats.total) * 100) + "%" : "0%"} icon={TrendingUp} color="bg-emerald-50 text-emerald-600 border border-emerald-100" />
+                <StatCard title="Paid" value={stats.paid} icon={CheckCircle2} color="bg-emerald-50 text-emerald-600 border border-emerald-100" />
+                <StatCard title="Pending" value={stats.pending} icon={AlertCircle} color="bg-amber-50 text-amber-500 border border-amber-100" />
+                <StatCard title="Students" value={stats.total} icon={Users} color="bg-purple-50 text-purple-600 border border-purple-100" />
             </div>
 
-            {/* Grid */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="overflow-auto max-h-[calc(100vh-380px)] relative">
-                    {loading && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-white/70 z-20">
-                            <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
-                        </div>
-                    )}
-                    <table className="w-full border-collapse bg-white text-sm">
-                        <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
-                            <tr>
-                                <th className="p-2 border border-gray-100 text-[10px] text-gray-400 uppercase w-10 text-center sticky left-0 z-20 bg-gray-50">#</th>
-                                <th className="p-2 border border-gray-100 text-[10px] text-gray-400 uppercase text-left w-52 sticky left-10 z-20 bg-gray-50">Student</th>
-                                {MONTHS.map(m => (
-                                    <th key={m} className="p-2 border border-gray-100 text-[10px] text-gray-500 uppercase w-24 text-center">{m.substring(0, 3)}</th>
-                                ))}
-                                <th className="p-2 border border-gray-100 text-[10px] text-emerald-600 uppercase w-20 text-center bg-emerald-50 sticky right-0 z-20">Total</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredStudents.length === 0 ? (
-                                <tr><td colSpan={MONTHS.length + 3} className="p-10 text-center text-gray-400">No students found.</td></tr>
-                            ) : (
-                                filteredStudents.map((s, idx) => {
-                                    const studentTotal = MONTHS.reduce((acc, m) => {
-                                        const r = feeData[s.studentId]?.[`${m} ${selectedYear}`];
-                                        return acc + (r ? r.amount : 0);
-                                    }, 0);
-                                    return (
-                                        <tr key={s.studentId} className="hover:bg-gray-50 transition-colors">
-                                            <td className="p-2 border border-gray-100 text-center text-xs text-gray-400 bg-gray-50 sticky left-0 z-10">{idx + 1}</td>
-                                            <td className="p-2 border border-gray-100 bg-white sticky left-10 z-10">
-                                                <div className="font-semibold text-gray-800 text-xs whitespace-nowrap overflow-hidden text-ellipsis w-44">{s.fullName}</div>
-                                                <div className="text-[9px] text-gray-400 font-mono">{s.studentId}</div>
-                                            </td>
-                                            {MONTHS.map(m => {
-                                                const monthFull = `${m} ${selectedYear}`;
-                                                const record = feeData[s.studentId]?.[monthFull];
-                                                const isPaid = !!record;
-                                                return (
-                                                    <td key={m}
-                                                        onClick={() => handleCellClick(s, monthFull)}
-                                                        title={isPaid ? `Rs. ${record?.amount}` : `Click to record payment for ${monthFull}`}
-                                                        className={clsx(
-                                                            "p-0 border border-gray-100 text-center cursor-pointer transition-all relative h-10",
-                                                            isPaid ? "bg-emerald-50 hover:bg-emerald-100" : "bg-white hover:bg-gray-50"
-                                                        )}
-                                                    >
-                                                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                                            {isPaid ? (
-                                                                <>
-                                                                    <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-1.5 rounded-full border border-emerald-200">PAID</span>
-                                                                    <span className="text-[8px] text-gray-400 mt-0.5">Rs.{record?.amount}</span>
-                                                                </>
-                                                            ) : (
-                                                                <span className="text-gray-200 text-lg opacity-0 hover:opacity-100">+</span>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                );
-                                            })}
-                                            <td className="p-2 border border-gray-100 text-center text-xs font-bold text-emerald-700 bg-emerald-50 sticky right-0 z-10">
-                                                {studentTotal > 0 ? `Rs.${studentTotal}` : "-"}
-                                            </td>
-                                        </tr>
-                                    );
-                                })
+            {/* ── Method Tabs ──────────────────────────────────────────── */}
+            <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
+                <div className="flex border-b border-gray-100 bg-gray-50/30">
+                    {([
+                        { key: "BARCODE", label: "Barcode Scan", icon: Barcode },
+                        { key: "SEARCH", label: "Name / ID Search", icon: Search },
+                        { key: "BATCH", label: "Batch Monitor", icon: Users }
+                    ] as const).map(t => (
+                        <button
+                            key={t.key}
+                            onClick={() => setTab(t.key)}
+                            className={clsx(
+                                "flex-1 flex items-center justify-center gap-3 py-5 text-sm font-black transition-all border-b-2",
+                                tab === t.key
+                                    ? "text-emerald-700 border-emerald-600 bg-emerald-50/80 shadow-inner"
+                                    : "text-gray-400 border-transparent hover:text-gray-600 hover:bg-gray-50"
                             )}
-                        </tbody>
-                        {/* Monthly totals row */}
-                        <tfoot className="sticky bottom-0 bg-gray-100 border-t-2 border-gray-200 z-10">
-                            <tr>
-                                <td colSpan={2} className="p-2 border border-gray-100 text-xs font-bold text-gray-600 sticky left-0 bg-gray-100 z-20">Monthly Total</td>
-                                {MONTHS.map(m => (
-                                    <td key={m} className="p-2 border border-gray-100 text-center text-[9px] font-bold text-emerald-700">
-                                        {monthlyTotals[m] > 0 ? `${monthlyTotals[m].toLocaleString()}` : ""}
-                                    </td>
-                                ))}
-                                <td className="p-2 border border-gray-100 text-center text-xs font-bold text-emerald-800 bg-emerald-100 sticky right-0">
-                                    Rs.{totalCollected.toLocaleString()}
-                                </td>
-                            </tr>
-                        </tfoot>
-                    </table>
+                        >
+                            <t.icon className="h-4 w-4" /> {t.label}
+                        </button>
+                    ))}
                 </div>
+
+                {/* ── TAB: BARCODE SCAN ───────────────────────────────── */}
+                {tab === "BARCODE" && (
+                    <div className="p-8 space-y-8">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            {/* Scanner */}
+                            <div className="bg-emerald-950 rounded-[2rem] p-10 text-white shadow-xl relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-8 opacity-5 flex items-center justify-center transform group-hover:scale-110 group-hover:rotate-6 transition-all duration-700"><Barcode className="h-64 w-64" /></div>
+                                <div className="relative z-10">
+                                    <div className="flex items-center gap-3 mb-2 text-emerald-50">
+                                        <div className="h-10 w-10 rounded-2xl bg-emerald-900 border border-emerald-800 flex items-center justify-center text-emerald-400 shadow-inner">
+                                            <ZapIcon className="h-5 w-5" />
+                                        </div>
+                                        <h2 className="text-xl font-black">Counter Scan</h2>
+                                    </div>
+                                    <p className="text-emerald-400/80 text-sm font-medium mb-8 ml-13">
+                                        Scan student ID card → instant PAID update. <br />Session: <strong className="text-emerald-300 ml-1">{month} {year}</strong>
+                                    </p>
+                                    <form onSubmit={handleScan} className="relative">
+                                        <Barcode className="absolute left-6 top-1/2 -translate-y-1/2 h-6 w-6 text-emerald-600 pointer-events-none" />
+                                        <input
+                                            ref={barcodeRef}
+                                            type="text"
+                                            autoFocus
+                                            value={barcodeValue}
+                                            onChange={e => setBarcodeValue(e.target.value)}
+                                            placeholder="Scan barcode or type ID..."
+                                            className="w-full bg-white text-gray-900 pl-16 pr-12 py-5 rounded-2xl text-xl font-mono tracking-widest focus:ring-4 focus:ring-emerald-500/50 outline-none shadow-inner placeholder:text-gray-300 font-bold"
+                                        />
+                                        {loadingBarcode && (
+                                            <Loader2 className="absolute right-6 top-1/2 -translate-y-1/2 h-6 w-6 text-emerald-600 animate-spin" />
+                                        )}
+                                    </form>
+                                </div>
+                            </div>
+
+                            {/* Recent Scans */}
+                            <div className="bg-gray-50/50 rounded-[2rem] p-8 border border-gray-100">
+                                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center justify-between">
+                                    Scan Log
+                                    <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-lg">{month} {year}</span>
+                                </h3>
+                                {recentScans.length === 0 ? (
+                                    <div className="text-center py-16 text-gray-300">
+                                        <div className="h-16 w-16 rounded-full bg-white flex items-center justify-center border border-gray-100 mx-auto mb-4 shadow-sm">
+                                            <Barcode className="h-8 w-8 text-gray-300" />
+                                        </div>
+                                        <p className="font-bold text-sm text-gray-400 tracking-wide">No scans this session yet</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
+                                        {recentScans.map((r, i) => (
+                                            <div key={i} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:border-emerald-200 transition-all">
+                                                <div>
+                                                    <p className="font-black text-gray-900 text-base">{r.student?.fullName}</p>
+                                                    <p className="text-[10px] text-gray-400 font-mono tracking-wider mt-0.5">{r.student?.studentId}</p>
+                                                </div>
+                                                <StatusBadge status="PAID" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── TAB: SEARCH ─────────────────────────────────────── */}
+                {tab === "SEARCH" && (
+                    <div className="p-8">
+                        <div className="relative mb-6">
+                            <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                            <input
+                                ref={searchRef}
+                                type="text"
+                                autoFocus
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                placeholder="Search by student name or ID..."
+                                className="w-full pl-14 pr-5 py-4 bg-gray-50/50 border border-gray-200 rounded-2xl text-base font-bold outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 shadow-inner placeholder:text-gray-300 transition-all"
+                            />
+                        </div>
+
+                        {searchResults.length === 0 && searchQuery && (
+                            <p className="text-center text-gray-400 py-16 font-bold tracking-wide">No students found for "{searchQuery}"</p>
+                        )}
+
+                        {searchResults.length === 0 && !searchQuery && (
+                            <div className="text-center py-16 text-gray-300">
+                                <div className="h-16 w-16 rounded-full bg-gray-50 flex items-center justify-center border border-gray-100 mx-auto mb-4">
+                                    <User className="h-8 w-8 text-gray-300" />
+                                </div>
+                                <p className="font-bold text-gray-400 tracking-wide">Type a name or ID to search</p>
+                            </div>
+                        )}
+
+                        {searchResults.length > 0 && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {searchResults.map(s => {
+                                    const rec = feeMap[s.studentId];
+                                    const isPaid = rec?.status === "PAID";
+                                    return (
+                                        <div key={s.studentId} className="flex items-center justify-between p-5 bg-white rounded-2xl border border-gray-100 shadow-sm hover:border-emerald-200 hover:shadow-md transition-all group">
+                                            <div className="flex items-center gap-4">
+                                                <div className="h-12 w-12 rounded-[1rem] bg-gray-50 border border-gray-100 flex items-center justify-center font-black text-gray-500 text-lg group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors">
+                                                    {s.fullName.substring(0, 1)}
+                                                </div>
+                                                <div>
+                                                    <p className="font-black text-gray-900 text-base">{s.fullName}</p>
+                                                    <p className="text-[10px] text-gray-400 font-mono tracking-wider mt-0.5">{s.studentId} · Batch {s.examBatch}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col items-end gap-2 shrink-0">
+                                                {rec && <StatusBadge status={rec.status} />}
+                                                {!isPaid ? (
+                                                    <button
+                                                        onClick={() => setConfirm({ student: s, action: "PAID" })}
+                                                        disabled={markingId === s.studentId + "PAID"}
+                                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-black uppercase tracking-widest shadow-sm hover:shadow transition-all flex items-center gap-1.5 disabled:opacity-50"
+                                                    >
+                                                        {markingId === s.studentId + "PAID" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                                                        Mark Paid
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => setConfirm({ student: s, action: "PENDING" })}
+                                                        className="px-4 py-2 bg-white border border-gray-200 hover:bg-amber-50 text-gray-500 hover:text-amber-700 hover:border-amber-200 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all"
+                                                    >
+                                                        Revert
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* ── TAB: BATCH MONITOR ──────────────────────────────── */}
+                {tab === "BATCH" && (
+                    <div className="p-0">
+                        {loadingData ? (
+                            <div className="flex justify-center py-24"><Loader2 className="h-10 w-10 animate-spin text-emerald-500" /></div>
+                        ) : (
+                            <div className="overflow-auto max-h-[580px]">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-gray-50/50 border-b border-gray-100 sticky top-0 backdrop-blur-md z-10">
+                                        <tr>
+                                            {["#", "Student", "Gender", "Status", "Method", "Updated By", "Actions"].map((h, i) => (
+                                                <th key={h} className={clsx("px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest", i >= 5 && "text-right")}>{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50/50">
+                                        {allStudents.length === 0 ? (
+                                            <tr><td colSpan={7} className="py-24 text-center text-gray-400 font-bold tracking-wide">No students found for Batch {batch}.</td></tr>
+                                        ) : (
+                                            allStudents.map((s, idx) => {
+                                                const rec = feeMap[s.studentId];
+                                                const isPaid = rec?.status === "PAID";
+                                                return (
+                                                    <tr key={s.studentId} className="hover:bg-emerald-50/30 transition-colors group">
+                                                        <td className="px-8 py-5 text-sm font-black text-gray-300 group-hover:text-emerald-300">{idx + 1}</td>
+                                                        <td className="px-8 py-5">
+                                                            <p className="font-black text-gray-900 text-base">{s.fullName}</p>
+                                                            <p className="text-[10px] text-gray-400 font-mono tracking-wider mt-0.5">{s.studentId}</p>
+                                                        </td>
+                                                        <td className="px-8 py-5 text-xs font-bold text-gray-500 uppercase tracking-widest">{s.gender || "—"}</td>
+                                                        <td className="px-8 py-5">
+                                                            <StatusBadge status={rec?.status || "PENDING"} />
+                                                        </td>
+                                                        <td className="px-8 py-5">
+                                                            {rec?.updateMethod ? (
+                                                                <span className="flex items-center gap-2 text-[10px] font-bold text-gray-500 bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-xl w-fit drop-shadow-sm">
+                                                                    {rec.updateMethod === "BARCODE" ? <Barcode className="h-3.5 w-3.5 text-gray-400" /> : <User className="h-3.5 w-3.5 text-gray-400" />}
+                                                                    {rec.updateMethod}
+                                                                </span>
+                                                            ) : <span className="text-gray-300 text-sm">—</span>}
+                                                        </td>
+                                                        <td className="px-8 py-5 text-xs font-medium text-gray-400 text-right">{rec?.updatedBy?.fullName || "—"}</td>
+                                                        <td className="px-8 py-5 text-right">
+                                                            {!isPaid ? (
+                                                                <button
+                                                                    onClick={() => setConfirm({ student: s, action: "PAID" })}
+                                                                    disabled={!!markingId}
+                                                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-all shadow-sm hover:shadow"
+                                                                >
+                                                                    Mark Paid
+                                                                </button>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => setConfirm({ student: s, action: "PENDING" })}
+                                                                    className="px-4 py-2 bg-white border border-gray-200 hover:bg-amber-50 text-gray-500 hover:text-amber-700 hover:border-amber-200 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all"
+                                                                >
+                                                                    Revert
+                                                                </button>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );
 }
 
-function ParentFeesView({ username }: { username: string }) {
-    const [feeRecords, setFeeRecords] = useState<any[]>([]);
+// ── ADMIN VIEW ────────────────────────────────────────────────────────────────
+
+function AdminFeesView() {
+    const [year, setYear] = useState(String(new Date().getFullYear()));
+    const [summary, setSummary] = useState<any>(null);
+    const [records, setRecords] = useState<FeeRecord[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [expandedBatch, setExpandedBatch] = useState<string | null>(null);
+
+    const load = async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem("token");
+            const [sRes, rRes] = await Promise.all([
+                fetch(`http://localhost:8080/api/fees/admin/summary?academicYear=${year}`, { headers: { "Authorization": `Bearer ${token}` } }),
+                fetch(`http://localhost:8080/api/fees/admin/all?academicYear=${year}`, { headers: { "Authorization": `Bearer ${token}` } })
+            ]);
+            if (sRes.ok) setSummary(await sRes.json());
+            if (rRes.ok) setRecords(await rRes.json());
+        } catch { } finally { setLoading(false); }
+    };
+
+    useEffect(() => { load(); }, [year]);
+
+    const byBatch = useMemo(() => {
+        const g: Record<string, FeeRecord[]> = {};
+        records.forEach(r => {
+            const b = r.student?.examBatch?.toString() || "Unknown";
+            if (!g[b]) g[b] = [];
+            g[b].push(r);
+        });
+        return g;
+    }, [records]);
+
+    return (
+        <div className="max-w-7xl mx-auto space-y-6 pb-20">
+            {/* Header */}
+            <div className="bg-white px-8 py-6 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+                <div className="flex items-center gap-5">
+                    <div className="h-14 w-14 rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-sm shrink-0"><BarChart3 className="h-6 w-6" /></div>
+                    <div>
+                        <h1 className="text-2xl font-black text-gray-900 tracking-tight">Fee Analytics</h1>
+                        <p className="text-sm text-gray-400 font-medium mt-1">View-only: Admin cannot update fee status</p>
+                    </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-4 bg-gray-50/50 p-2 rounded-2xl border border-gray-100">
+                    <select value={year} onChange={e => setYear(e.target.value)}
+                        className="bg-white border text-gray-700 border-gray-200 px-5 py-3 rounded-xl text-sm font-black outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 shadow-sm cursor-pointer transition-all hover:bg-gray-50 min-w-[120px]">
+                        {["2024", "2025", "2026", "2027"].map(y => <option key={y}>{y}</option>)}
+                    </select>
+                    <button onClick={load} className="flex items-center gap-2 text-sm font-black text-gray-500 border border-gray-200 px-6 py-3 rounded-xl hover:bg-gray-50 hover:text-gray-900 transition-all shadow-sm active:scale-95">
+                        <RefreshCw className="h-4 w-4" /> Refresh
+                    </button>
+                </div>
+            </div>
+
+            {/* Summary Cards */}
+            {summary && (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                    <StatCard title="Completion" value={`${summary.completionPercentage}%`} icon={TrendingUp} color="bg-emerald-50 text-emerald-600 border border-emerald-100" />
+                    <StatCard title="Total Records" value={summary.totalRecords} icon={Users} color="bg-purple-50 text-purple-600 border border-purple-100" />
+                    <StatCard title="Paid" value={summary.paid} icon={CheckCircle2} color="bg-blue-50 text-blue-600 border border-blue-100" />
+                    <StatCard title="Pending" value={summary.pending} icon={AlertCircle} color="bg-amber-50 text-amber-500 border border-amber-100" />
+                </div>
+            )}
+
+            {/* Monthly Overview */}
+            {summary?.monthlyPaid && (
+                <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
+                    <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-8">Monthly Paid Count — {year}</h3>
+                    <div className="flex items-end gap-3 h-36">
+                        {MONTHS.map(m => {
+                            const count = summary.monthlyPaid[m] || 0;
+                            const max = Math.max(...Object.values(summary.monthlyPaid as Record<string, number>), 1);
+                            const height = Math.round((count / max) * 100);
+                            return (
+                                <div key={m} className="flex-1 flex flex-col items-center gap-2 group">
+                                    <span className="text-[10px] font-black text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity -translate-y-2 group-hover:translate-y-0 relative top-2">{count > 0 ? count : ""}</span>
+                                    <div
+                                        style={{ height: `${Math.max(height, count > 0 ? 10 : 2)}%` }}
+                                        className={clsx("w-full rounded-t-xl transition-all duration-500 group-hover:brightness-110", count > 0 ? "bg-gradient-to-t from-emerald-600 to-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.3)]" : "bg-gray-100")}
+                                    />
+                                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{m.substring(0, 3)}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* Batch Breakdown */}
+            {loading ? (
+                <div className="flex justify-center py-24"><Loader2 className="h-10 w-10 animate-spin text-emerald-500" /></div>
+            ) : (
+                <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="p-8 border-b border-gray-100 flex items-center justify-between">
+                        <h3 className="font-black text-gray-900">Batch-Wise Breakdown</h3>
+                        <div className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-xl text-xs font-black border border-emerald-100">{Object.keys(byBatch).length} Batches</div>
+                    </div>
+                    {Object.entries(byBatch).map(([b, recs]) => {
+                        const paid = recs.filter(r => r.status === "PAID").length;
+                        const pct = recs.length > 0 ? Math.round((paid / recs.length) * 100) : 0;
+                        const isOpen = expandedBatch === b;
+                        return (
+                            <div key={b} className="border-b border-gray-50 last:border-0">
+                                <button
+                                    onClick={() => setExpandedBatch(isOpen ? null : b)}
+                                    className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <span className="font-black text-gray-900">Batch {b}</span>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-24 h-2 bg-gray-100 rounded-full"><div style={{ width: `${pct}%` }} className="h-full bg-emerald-500 rounded-full" /></div>
+                                            <span className="text-xs font-bold text-gray-500">{pct}%</span>
+                                        </div>
+                                        <span className="text-xs text-gray-400">{paid} / {recs.length} paid</span>
+                                    </div>
+                                    {isOpen ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+                                </button>
+                                {isOpen && (
+                                    <div className="overflow-auto max-h-80 border-t border-gray-50">
+                                        <table className="w-full text-xs text-left">
+                                            <thead className="bg-gray-50 sticky top-0">
+                                                <tr>
+                                                    {["Student", "Month", "Status", "Method", "Updated By"].map(h => (
+                                                        <th key={h} className="px-5 py-3 font-black text-gray-400 uppercase tracking-widest text-[9px]">{h}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-50">
+                                                {recs.map(r => (
+                                                    <tr key={r.id} className="hover:bg-gray-50">
+                                                        <td className="px-5 py-3 font-bold text-gray-900">{r.student?.fullName}</td>
+                                                        <td className="px-5 py-3 text-gray-500">{r.month}</td>
+                                                        <td className="px-5 py-3"><StatusBadge status={r.status} /></td>
+                                                        <td className="px-5 py-3 text-gray-500">{r.updateMethod || "—"}</td>
+                                                        <td className="px-5 py-3 text-gray-400">{r.updatedBy?.fullName || "—"}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ── STUDENT VIEW ──────────────────────────────────────────────────────────────
+
+function StudentFeesView({ userId }: { userId: string }) {
+    const [records, setRecords] = useState<FeeRecord[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const fetchData = async () => {
+        const load = async () => {
             try {
                 const token = localStorage.getItem("token");
-                const studentId = localStorage.getItem("userId") || username;
-                const res = await fetch(`http://localhost:8080/api/fees/student/${studentId}`, {
-                    headers: { "Authorization": `Bearer ${token}` }
-                });
-                if (res.ok) setFeeRecords(await res.json());
-            } catch (e) { console.error(e); } finally { setLoading(false); }
+                const res = await fetch(`http://localhost:8080/api/fees/student/${userId}`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (res.ok) setRecords(await res.json());
+            } catch { } finally { setLoading(false); }
         };
-        fetchData();
-    }, [username]);
+        if (userId) load();
+    }, [userId]);
 
-    const totalPaid = feeRecords.filter(r => r.status === "PAID").reduce((a, r) => a + (r.amount || 0), 0);
-    const paidMonths = feeRecords.filter(r => r.status === "PAID").length;
+    const stats = useMemo(() => {
+        const paid = records.filter(r => r.status === "PAID").length;
+        return { paid, pending: records.length - paid, total: records.length };
+    }, [records]);
 
     return (
-        <div className="max-w-2xl mx-auto">
-            <div className="bg-gradient-to-r from-emerald-900 to-teal-800 rounded-2xl p-6 text-white mb-6 shadow-xl">
-                <h2 className="text-xl font-bold mb-1">கட்டண விவரம் (Fee Details)</h2>
-                <p className="text-emerald-200 text-sm mb-4">Your payment history</p>
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-white/10 rounded-xl p-3 text-center">
-                        <p className="text-2xl font-bold text-emerald-300">Rs. {totalPaid.toLocaleString()}</p>
-                        <p className="text-xs text-emerald-200">Total Paid</p>
+        <div className="max-w-4xl mx-auto space-y-8 pb-20">
+            {/* Hero */}
+            <div className="bg-gradient-to-br from-emerald-900 via-emerald-800 to-teal-900 rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden">
+                <div className="absolute -bottom-10 -right-10 opacity-5 transform rotate-6 scale-110"><CreditCard className="h-64 w-64" /></div>
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
+                    <div>
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="h-12 w-12 rounded-2xl bg-white/10 flex items-center justify-center border border-white/20 backdrop-blur-sm">
+                                <CreditCard className="h-6 w-6 text-emerald-100" />
+                            </div>
+                            <h2 className="text-3xl font-black tracking-tight">My Fee Status</h2>
+                        </div>
+                        <p className="text-emerald-100/80 text-sm font-medium pl-1">View-only — contact staff to update payment status.</p>
                     </div>
-                    <div className="bg-white/10 rounded-xl p-3 text-center">
-                        <p className="text-2xl font-bold text-amber-300">{paidMonths}</p>
-                        <p className="text-xs text-amber-200">Months Paid</p>
+                    <div className="flex gap-4">
+                        <div className="text-center bg-black/20 backdrop-blur-md rounded-[2rem] p-6 border border-white/10 min-w-[120px] shadow-inner">
+                            <p className="text-4xl font-black tracking-tight">{stats.paid}</p>
+                            <p className="text-[10px] font-black uppercase text-emerald-400 tracking-widest mt-2">Paid</p>
+                        </div>
+                        <div className="text-center bg-black/20 backdrop-blur-md rounded-[2rem] p-6 border border-white/10 min-w-[120px] shadow-inner">
+                            <p className="text-4xl font-black tracking-tight">{stats.pending}</p>
+                            <p className="text-[10px] font-black uppercase text-amber-400 tracking-widest mt-2">Pending</p>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {loading ? (
-                <div className="flex justify-center py-10"><Loader2 className="animate-spin h-8 w-8 text-emerald-600" /></div>
-            ) : feeRecords.length === 0 ? (
-                <div className="text-center py-10 text-gray-400 bg-white rounded-2xl border border-gray-100">
-                    <CreditCard className="h-10 w-10 mx-auto mb-2 text-gray-200" />
-                    <p>No fee records found.</p>
-                </div>
-            ) : (
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="p-4 border-b border-gray-100 bg-gray-50">
-                        <h3 className="font-bold text-gray-800">Payment History</h3>
+            {/* Pending Alert */}
+            {stats.pending > 0 && (
+                <div className="bg-amber-50/80 border border-amber-200 border-l-4 border-l-amber-500 rounded-[1.5rem] p-6 flex items-start sm:items-center gap-4 shadow-sm">
+                    <div className="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                        <AlertCircle className="h-5 w-5 text-amber-600" />
                     </div>
-                    <div className="divide-y divide-gray-50">
-                        {feeRecords.map((r, idx) => (
-                            <div key={idx} className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
-                                <div>
-                                    <p className="font-semibold text-gray-900 text-sm">{r.month}</p>
-                                    {r.notes && <p className="text-xs text-gray-400">{r.notes}</p>}
-                                </div>
-                                <div className="text-right">
-                                    <p className="font-bold text-gray-900 text-sm">Rs. {r.amount?.toLocaleString()}</p>
-                                    <span className={clsx(
-                                        "text-[10px] font-bold px-2 py-0.5 rounded-full border",
-                                        r.status === "PAID"
-                                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                            : "bg-red-50 text-red-700 border-red-200"
-                                    )}>
-                                        {r.status === "PAID" ? "✓ Paid" : "⚠ Pending"}
-                                    </span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                    <p className="text-sm font-bold text-amber-900 leading-relaxed">
+                        You have <strong className="text-amber-700 text-base mx-1">{stats.pending}</strong> pending month(s). Please contact your centre staff to update your fee status.
+                    </p>
                 </div>
             )}
+
+            {/* Records */}
+            <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
+                <div className="p-8 border-b border-gray-100">
+                    <h3 className="font-black text-gray-900 tracking-tight text-lg">Payment History</h3>
+                </div>
+                {loading ? (
+                    <div className="py-24 flex justify-center"><Loader2 className="h-10 w-10 animate-spin text-emerald-500" /></div>
+                ) : records.length === 0 ? (
+                    <div className="py-24 text-center text-gray-400 font-bold tracking-wide">No fee records found yet.</div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-gray-50/50 border-b border-gray-100">
+                                <tr>
+                                    {["Month", "Year", "Status", "Updated By", "Date"].map((h, i) => (
+                                        <th key={h} className={clsx("px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest", i >= 3 && "text-right")}>{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50/50">
+                                {records.map(r => (
+                                    <tr key={r.id} className="hover:bg-gray-50 transition-colors group">
+                                        <td className="px-8 py-6 font-black text-gray-900 text-base">{r.month}</td>
+                                        <td className="px-8 py-6 text-gray-500 font-bold tracking-widest">{r.academicYear}</td>
+                                        <td className="px-8 py-6"><StatusBadge status={r.status} /></td>
+                                        <td className="px-8 py-6 text-gray-500 text-xs font-bold text-right">{r.updatedBy?.fullName || "System"}</td>
+                                        <td className="px-8 py-6 text-gray-400 text-xs font-mono text-right">
+                                            {r.updatedAt ? new Date(r.updatedAt).toLocaleDateString("en-GB") : "—"}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
 
+// ── Entry Point ───────────────────────────────────────────────────────────────
+
 export default function FeesPage() {
-    const [userRole, setUserRole] = useState<"ADMIN" | "STAFF" | "PARENT">("STAFF");
-    const [username, setUsername] = useState<string>("");
+    const [role, setRole] = useState<"SUPER_ADMIN" | "STAFF" | "STUDENT">("STAFF");
+    const [userId, setUserId] = useState("");
 
     useEffect(() => {
         const storedRole = localStorage.getItem("userRole");
-        const storedUsername = localStorage.getItem("username");
-        if (storedRole) setUserRole(storedRole as any);
-        if (storedUsername) setUsername(storedUsername);
+        const storedId = localStorage.getItem("userId") || localStorage.getItem("username") || "";
+        if (storedRole) setRole(storedRole as any);
+        setUserId(storedId);
     }, []);
 
     return (
-        <AdminLayout userRole={userRole}>
-            {userRole === "PARENT" ? (
-                <ParentFeesView username={username} />
-            ) : (
-                <StaffFeesView username={username} />
-            )}
+        <AdminLayout userRole={role}>
+            <div className="p-2 sm:p-4">
+                {role === "STUDENT" ? <StudentFeesView userId={userId} />
+                    : role === "SUPER_ADMIN" ? <AdminFeesView />
+                        : <StaffFeesView staffId={userId} />}
+            </div>
         </AdminLayout>
     );
 }

@@ -3,10 +3,13 @@ package com.aharam.tuition.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Data
-@Table(name = "attendance")
+@Table(name = "attendance", uniqueConstraints = {
+        @UniqueConstraint(columnNames = { "student_id", "date" })
+})
 public class Attendance {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -21,12 +24,35 @@ public class Attendance {
     @Enumerated(EnumType.STRING)
     private AttendanceStatus status;
 
-    private String recordedBy; // Username of staff/admin
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private AttendanceMethod method = AttendanceMethod.MANUAL;
+
+    @ManyToOne
+    @JoinColumn(name = "marked_by", referencedColumnName = "id")
+    private User markedBy;
+
+    private String batchOrClass;
+
+    private String center;
+
+    private java.time.LocalTime time;
+
+    private String teacherNotes;
+
+    @Column(updatable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    private LocalDateTime deletedAt;
 
     public enum AttendanceStatus {
         PRESENT,
         ABSENT,
-        LATE,
-        EXCUSED
+        LATE
+    }
+
+    public enum AttendanceMethod {
+        BARCODE,
+        MANUAL
     }
 }

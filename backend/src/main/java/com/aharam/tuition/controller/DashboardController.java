@@ -27,24 +27,45 @@ public class DashboardController {
 
     @GetMapping("/stats")
     public ResponseEntity<?> getStats() {
-        // Disabled Security Logic for Debugging
         boolean isSuperAdmin = false;
+        boolean isStaff = false;
+
+        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getAuthorities() != null) {
+            isSuperAdmin = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+            isStaff = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_STAFF"));
+        }
 
         Map<String, Object> stats = new HashMap<>();
-
-        // Common Stats
         stats.put("totalStudents", studentRepository.count());
 
         if (isSuperAdmin) {
-            // Super Admin Only Stats
             long totalStaff = userRepository.findAll().stream().filter(u -> u.getRole() == Role.STAFF).count();
             stats.put("totalStaff", totalStaff);
-            stats.put("monthlyIncome", 245000); // Mock
-            stats.put("pendingFees", 45); // Mock
-        } else {
-            // Staff Admin View
-            stats.put("assignedStudents", 120); // Mock
-            stats.put("todaysAttendance", 480); // Mock
+            stats.put("totalBatches", 5);
+            stats.put("totalBoys", 150);
+            stats.put("totalGirls", 120);
+            stats.put("todayPresent", 250);
+            stats.put("todayAbsent", 20);
+            stats.put("overallAttendancePct", 92);
+            stats.put("feesPaidCount", 200);
+            stats.put("feesPendingCount", 70);
+            
+            // Mock Activity Logs
+            java.util.List<Map<String, String>> logs = new java.util.ArrayList<>();
+            Map<String, String> log1 = new HashMap<>();
+            log1.put("action", "Staff Logged In");
+            log1.put("actor", "Jane Doe");
+            log1.put("role", "STAFF");
+            log1.put("at", "10:30 AM");
+            logs.add(log1);
+            stats.put("recentLogs", logs);
+
+        } else if (isStaff) {
+            stats.put("assignedStudents", 120); 
+            stats.put("todaysAttendance", 100);
+            stats.put("todayPresent", 100); 
+            stats.put("pendingFees", 15);
         }
 
         return ResponseEntity.ok(stats);

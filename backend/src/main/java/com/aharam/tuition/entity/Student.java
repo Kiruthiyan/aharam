@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "students")
@@ -17,29 +18,39 @@ public class Student {
     @Column(unique = true, nullable = false)
     private String studentId; // Manually entered ID, e.g., AHC-1001
 
+    @OneToOne
+    @JoinColumn(name = "user_id", referencedColumnName = "id")
+    private User user;
+
+    @Column(unique = true, nullable = false)
+    private String barcode;
+
+    @Column(nullable = false)
+    private String batchOrClass;
+
     @Column(nullable = false)
     private String fullName;
 
     @Column(nullable = false)
     private String fatherName;
 
+    private String fatherOccupation;
+
     @Column(nullable = false)
     private String motherName;
+
+    private String motherOccupation;
 
     private String guardianName;
 
     private String schoolName;
 
-    // Derived from ID logic: KT2026xxx
-    // Center: K (Kokuvil) / M (Mallakam)
     @Column(nullable = false)
     private String center;
 
-    // Medium: T (Tamil) / E (English)
     @Column(nullable = false)
     private String medium;
 
-    // Exam Year: 2026, 2027...
     @Column(nullable = false)
     private Integer examBatch;
 
@@ -58,4 +69,18 @@ public class Student {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private StudentStatus status = StudentStatus.ACTIVE;
+
+    @ManyToOne
+    @JoinColumn(name = "created_by", referencedColumnName = "id")
+    private User createdBy;
+
+    @Column(updatable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    private LocalDateTime updatedAt = LocalDateTime.now();
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }

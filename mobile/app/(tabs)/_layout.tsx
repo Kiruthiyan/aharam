@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { getAuth } from '../../lib/auth';
 import { BlurView } from 'expo-blur';
 import { Platform, StyleSheet } from 'react-native';
-import { LayoutDashboard, CalendarCheck2, QrCode, ScanLine, FileText, Wallet, Settings } from 'lucide-react-native';
+import { LayoutDashboard, CalendarCheck2, QrCode, ScanLine, FileText, Wallet, Settings, Users } from 'lucide-react-native';
 
 export default function TabsLayout() {
     const [role, setRole] = useState<string>('PARENT');
@@ -64,6 +64,17 @@ export default function TabsLayout() {
                     tabBarLabel: 'Home',
                 }}
             />
+            {isStaff && (
+                <Tabs.Screen
+                    name="students"
+                    options={{
+                        title: 'Students',
+                        headerTitle: '👨‍🎓 மாணவர் விபரங்கள் (Students)',
+                        tabBarIcon: ({ color, size }) => <Users color={color} size={24} strokeWidth={2.5} />,
+                        tabBarLabel: 'Students',
+                    }}
+                />
+            )}
             <Tabs.Screen
                 name="attendance"
                 options={{

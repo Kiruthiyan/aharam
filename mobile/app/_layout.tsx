@@ -2,6 +2,7 @@ import { Stack, router } from 'expo-router';
 import { useEffect } from 'react';
 import { LogBox } from 'react-native';
 import { isLoggedIn } from '../lib/auth';
+import { LanguageProvider } from '../lib/i18n';
 
 // Globally suppress specific React 19 deprecation errors from triggering the Web Red Screen Overlay
 const originalConsoleError = console.error;
@@ -31,9 +32,11 @@ export default function RootLayout() {
     }, []);
 
     return (
-        <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(tabs)" />
-        </Stack>
+        <LanguageProvider>
+            <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(auth)" />
+                <Stack.Screen name="(tabs)" />
+            </Stack>
+        </LanguageProvider>
     );
 }

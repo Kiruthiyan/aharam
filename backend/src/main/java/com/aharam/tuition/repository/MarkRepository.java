@@ -8,9 +8,9 @@ import java.util.List;
 
 @Repository
 public interface MarkRepository extends JpaRepository<Mark, Long> {
-    List<Mark> findByStudent_StudentId(String studentId);
+    List<Mark> findByStudent_StudentIdAndDeletedAtIsNull(String studentId);
 
-    List<Mark> findByExamNameAndSubject(String examName, String subject);
+    List<Mark> findByExam_IdAndDeletedAtIsNull(Long examId);
 
-    List<Mark> findByExamNameAndStudent_ExamBatch(String examName, Integer examBatch);
+    List<Mark> findByExam_NameAndStudent_ExamBatchAndDeletedAtIsNull(String examName, Integer examBatch);
 }

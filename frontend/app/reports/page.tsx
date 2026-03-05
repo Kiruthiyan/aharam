@@ -42,12 +42,12 @@ export default function ReportsPage() {
 
 
     return (
-        <AdminLayout userRole="ADMIN">
+        <AdminLayout userRole="SUPER_ADMIN">
             <div className="mb-8 flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                         <BarChart3 className="h-8 w-8 text-emerald-600" />
-                        அறிக்கைகள் (Reports)
+                        System Reports
                     </h1>
                     <p className="text-gray-500 mt-1">System-wide analytics and downloadable reports.</p>
                 </div>
@@ -84,13 +84,8 @@ export default function ReportsPage() {
                         <button className="text-sm text-emerald-600 font-medium hover:underline">View All</button>
                     </div>
                     <div className="space-y-3">
-                        <div className="p-3 bg-red-50 rounded-lg flex justify-between items-center text-sm">
-                            <span className="font-medium text-gray-800">Kavin Kumar (AHC-1001)</span>
-                            <span className="bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-bold">Overdue: Rs. 1500</span>
-                        </div>
-                        <div className="p-3 bg-red-50 rounded-lg flex justify-between items-center text-sm">
-                            <span className="font-medium text-gray-800">Ravi Shankar (AHC-1004)</span>
-                            <span className="bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-bold">Overdue: Rs. 3000</span>
+                        <div className="p-4 bg-gray-50 rounded-lg text-center text-sm border border-dashed border-gray-200 text-gray-400">
+                            Insufficient data to generate defaulters report for this month.
                         </div>
                     </div>
                 </div>
@@ -100,18 +95,13 @@ export default function ReportsPage() {
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="font-bold text-gray-900 flex items-center gap-2">
                             <FileText className="h-5 w-5 text-blue-500" />
-                            Top Performers (Term 1)
+                            Top Performers
                         </h3>
                         <button className="text-sm text-emerald-600 font-medium hover:underline">View All</button>
                     </div>
                     <div className="space-y-3">
-                        <div className="p-3 bg-blue-50 rounded-lg flex justify-between items-center text-sm">
-                            <span className="font-medium text-gray-800">Anitha R. (AHC-1002)</span>
-                            <span className="bg-blue-200 text-blue-800 px-2 py-1 rounded text-xs font-bold">Avg: 95%</span>
-                        </div>
-                        <div className="p-3 bg-blue-50 rounded-lg flex justify-between items-center text-sm">
-                            <span className="font-medium text-gray-800">Siva K. (AHC-1005)</span>
-                            <span className="bg-blue-200 text-blue-800 px-2 py-1 rounded text-xs font-bold">Avg: 92%</span>
+                        <div className="p-4 bg-gray-50 rounded-lg text-center text-sm border border-dashed border-gray-200 text-gray-400">
+                            Performances will be calculated after the upcoming term exams.
                         </div>
                     </div>
                 </div>

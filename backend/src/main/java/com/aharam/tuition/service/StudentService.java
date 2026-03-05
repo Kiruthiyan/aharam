@@ -38,21 +38,28 @@ public class StudentService {
             throw new Exception("Error generating ID, please try again.");
         }
 
-        // ... rest same ...
+        // 1. Initial Student Save Setup
         student.setAdmissionDate(LocalDate.now());
         student.setStatus(StudentStatus.ACTIVE);
+        student.setBarcode(student.getStudentId()); // Barcode fallback
+        student.setBatchOrClass("Auto-Batch");
         Student savedStudent = studentRepository.save(student);
 
-        // 2. Create Parent User Account
-        // Username = StudentID
+        // 2. Create Student User Account
+        // Email = StudentID@student.aharam.com
         // Password = FullName (Temporary)
-        User parentUser = new User();
-        parentUser.setUsername(savedStudent.getStudentId());
-        parentUser.setPassword(encoder.encode(savedStudent.getFullName())); // Default password
-        parentUser.setRole(Role.PARENT);
-        parentUser.setRelatedId(savedStudent.getStudentId());
+        User studentUser = new User();
+        studentUser.setFullName(savedStudent.getFullName());
+        studentUser.setEmail(savedStudent.getStudentId()); // Login ID is now just the Student ID
+        studentUser.setPassword(encoder.encode(savedStudent.getFullName().toLowerCase())); // Default password (lowercase)
+        studentUser.setRole(Role.STUDENT);
+        studentUser.setActive(true);
+        studentUser.setPasswordChangeRequired(true);
 
-        userRepository.save(parentUser);
+        User savedUser = userRepository.save(studentUser);
+
+        savedStudent.setUser(savedUser);
+        studentRepository.save(savedStudent);
 
         return savedStudent;
     }

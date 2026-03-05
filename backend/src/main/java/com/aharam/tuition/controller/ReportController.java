@@ -1,20 +1,13 @@
 package com.aharam.tuition.controller;
 
-import com.aharam.tuition.entity.Student;
-import com.aharam.tuition.repository.AttendanceRepository;
 import com.aharam.tuition.repository.FeeRepository;
-import com.aharam.tuition.repository.MarkRepository;
 import com.aharam.tuition.repository.StudentRepository;
-import com.aharam.tuition.service.AttendanceService;
-import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/reports")
@@ -27,50 +20,40 @@ public class ReportController {
     @Autowired
     private FeeRepository feeRepository;
 
-    @Autowired
-    private AttendanceRepository attendanceRepository;
-
     @GetMapping("/summary")
     public ResponseEntity<?> getSummary() {
         long totalStudents = studentRepository.count();
-        long activeStudents = studentRepository.findAll().stream().filter(s -> s.getStatus().name().equals("ACTIVE"))
+        long activeStudents = studentRepository.findAll().stream()
+                .filter(s -> s.getStatus() != null && s.getStatus().name().equals("ACTIVE"))
                 .count();
 
-        // Mocking Income for now (or summing actual fees)
-        double totalIncome = feeRepository.findAll().stream().mapToDouble(f -> f.getAmount()).sum();
+        long totalPaid = feeRepository.findAll().stream()
+                .filter(f -> f.getStatus() != null && f.getStatus().name().equals("PAID"))
+                .count();
+        long totalPending = feeRepository.findAll().stream()
+                .filter(f -> f.getStatus() == null || f.getStatus().name().equals("PENDING"))
+                .count();
 
-        return ResponseEntity.ok(new ReportSummary(totalStudents, activeStudents, totalIncome));
+        return ResponseEntity.ok(new ReportSummary(totalStudents, activeStudents, totalPaid, totalPending));
     }
 
     @GetMapping("/defaulters")
     public ResponseEntity<List<DefaulterDTO>> getDefaulters() {
-        // Logic: Find students who haven't paid fees for current month (Mock logic for
-        // simplicity)
-        // In real world: check against generated fee demands.
-        // Here: Return dummy list or those with PENDING status if we had that.
-
-        List<DefaulterDTO> list = new ArrayList<>();
-        // Example: just returning empty for now or implementing basic logic
-        return ResponseEntity.ok(list);
+        return ResponseEntity.ok(new ArrayList<>());
     }
 
-    @Data
+    @lombok.Data
+    @lombok.AllArgsConstructor
     static class ReportSummary {
         private long totalStudents;
         private long activeStudents;
-        private double totalIncome;
-
-        public ReportSummary(long totalStudents, long activeStudents, double totalIncome) {
-            this.totalStudents = totalStudents;
-            this.activeStudents = activeStudents;
-            this.totalIncome = totalIncome;
-        }
+        private long feesPaid;
+        private long feesPending;
     }
 
-    @Data
+    @lombok.Data
     static class DefaulterDTO {
         private String studentId;
         private String name;
-        private double amountDue;
     }
 }

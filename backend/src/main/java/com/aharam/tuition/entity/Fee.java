@@ -2,11 +2,13 @@ package com.aharam.tuition.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Data
-@Table(name = "fees")
+@Table(name = "fees", uniqueConstraints = {
+        @UniqueConstraint(columnNames = { "student_id", "academic_year", "month" })
+})
 public class Fee {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -16,18 +18,41 @@ public class Fee {
     @JoinColumn(name = "student_id", referencedColumnName = "studentId")
     private Student student;
 
-    private String month; // e.g., "January 2024"
-    private Double amount;
-    private LocalDate paidDate;
+    @Column(nullable = false)
+    private String academicYear; // e.g. "2026"
+
+    @Column(nullable = false)
+    private String month; // e.g. "January"
 
     @Enumerated(EnumType.STRING)
-    private PaymentStatus status;
+    @Column(nullable = false)
+    private FeeStatus status = FeeStatus.PENDING;
 
-    private String recordedBy;
+    @Enumerated(EnumType.STRING)
+    private UpdateMethod updateMethod;
 
-    public enum PaymentStatus {
-        PAID,
-        PENDING,
-        OVERDUE
+    @ManyToOne
+    @JoinColumn(name = "updated_by", referencedColumnName = "id")
+    private User updatedBy;
+
+    @Column(updatable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    private LocalDateTime updatedAt = LocalDateTime.now();
+
+    // Soft delete
+    private LocalDateTime deletedAt;
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
+
+    public enum FeeStatus {
+        PAID, PENDING
+    }
+
+    public enum UpdateMethod {
+        BARCODE, MANUAL
     }
 }

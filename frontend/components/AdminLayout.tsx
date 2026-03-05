@@ -19,25 +19,26 @@ import {
     ChevronLeft,
     ChevronRight,
     Shield,
+    FileText,
 } from "lucide-react";
 import clsx from "clsx";
 
 interface AdminLayoutProps {
     children: React.ReactNode;
-    userRole?: "ADMIN" | "STAFF" | "PARENT";
+    userRole?: "SUPER_ADMIN" | "STAFF" | "STUDENT";
 }
 
-const roleBadge: Record<string, { label: string; tamilLabel: string; color: string }> = {
-    ADMIN: { label: "Admin", tamilLabel: "நிர்வாகி", color: "bg-purple-500/20 text-purple-200 border-purple-500/30" },
-    STAFF: { label: "Staff", tamilLabel: "ஆசிரியர்", color: "bg-blue-500/20 text-blue-200 border-blue-500/30" },
-    PARENT: { label: "Parent", tamilLabel: "பெற்றோர்", color: "bg-amber-500/20 text-amber-200 border-amber-500/30" },
+const roleBadge: Record<string, { label: string; color: string }> = {
+    SUPER_ADMIN: { label: "Admin", color: "bg-purple-500/20 text-purple-200 border-purple-500/30" },
+    STAFF: { label: "Staff", color: "bg-blue-500/20 text-blue-200 border-blue-500/30" },
+    STUDENT: { label: "Student", color: "bg-amber-500/20 text-amber-200 border-amber-500/30" },
 };
 
-export default function AdminLayout({ children, userRole = "ADMIN" }: AdminLayoutProps) {
+export default function AdminLayout({ children, userRole = "SUPER_ADMIN" }: AdminLayoutProps) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [collapsed, setCollapsed] = useState(false);
     const [username, setUsername] = useState("Admin");
-    const [role, setRole] = useState<"ADMIN" | "STAFF" | "PARENT">(userRole);
+    const [role, setRole] = useState<"SUPER_ADMIN" | "STAFF" | "STUDENT">(userRole);
     const pathname = usePathname();
     const router = useRouter();
 
@@ -51,7 +52,7 @@ export default function AdminLayout({ children, userRole = "ADMIN" }: AdminLayou
 
         const storedName = localStorage.getItem("name");
         const storedUser = localStorage.getItem("username");
-        const storedRole = localStorage.getItem("userRole") as "ADMIN" | "STAFF" | "PARENT" | null;
+        const storedRole = localStorage.getItem("userRole") as "SUPER_ADMIN" | "STAFF" | "STUDENT" | null;
         if (storedName) setUsername(storedName);
         else if (storedUser) setUsername(storedUser);
         if (storedRole) setRole(storedRole);
@@ -65,19 +66,32 @@ export default function AdminLayout({ children, userRole = "ADMIN" }: AdminLayou
         router.replace("/login");
     };
 
-    const allNavigation = [
-        { name: "முகப்பு (Overview)", href: "/dashboard", icon: LayoutDashboard, roles: ["ADMIN", "STAFF", "PARENT"] },
-        { name: "மாணவர்கள் (Students)", href: "/students", icon: Users, roles: ["ADMIN", "STAFF"] },
-        { name: "பதிவு (Registration)", href: "/students/register", icon: GraduationCap, roles: ["ADMIN", "STAFF"] },
-        { name: "வரவு (Attendance)", href: "/attendance", icon: Calendar, roles: ["ADMIN", "STAFF", "PARENT"] },
-        { name: "பரிக்ஷை (Academic)", href: "/marks", icon: BookOpen, roles: ["ADMIN", "STAFF", "PARENT"] },
-        { name: "கட்டணம் (Fees)", href: "/fees", icon: CreditCard, roles: ["ADMIN", "STAFF", "PARENT"] },
-        { name: "நிர்வாகிகள் (Staff)", href: "/staff", icon: Shield, roles: ["ADMIN"] },
-        { name: "அறிக்கைகள் (Reports)", href: "/reports", icon: BookOpen, roles: ["ADMIN"] },
+    // FINAL Admin structure: authority-focused only (no students/registration/academic pages)
+    const adminNavigation = [
+        { name: "Overview", href: "/dashboard", icon: LayoutDashboard, roles: ["SUPER_ADMIN"] },
+        { name: "Attendance", href: "/attendance", icon: Calendar, roles: ["SUPER_ADMIN"] },
+        { name: "Fees", href: "/fees", icon: CreditCard, roles: ["SUPER_ADMIN"] },
+        { name: "Staff", href: "/staff", icon: Shield, roles: ["SUPER_ADMIN"] },
+        { name: "Reports", href: "/reports", icon: BookOpen, roles: ["SUPER_ADMIN"] },
+        { name: "Activity Logs", href: "/activity-logs", icon: FileText, roles: ["SUPER_ADMIN"] },
+        { name: "Notifications", href: "/notifications", icon: Bell, roles: ["SUPER_ADMIN"] },
+        { name: "Settings", href: "/settings", icon: Settings, roles: ["SUPER_ADMIN"] },
     ];
 
-    const navigation = allNavigation.filter(item => item.roles.includes(role));
-    const badge = roleBadge[role] || roleBadge["ADMIN"];
+    // Staff/Student navigation (operational)
+    const nonAdminNavigation = [
+        { name: "Overview", href: "/dashboard", icon: LayoutDashboard, roles: ["STAFF", "STUDENT"] },
+        { name: "Students", href: "/students", icon: Users, roles: ["STAFF"] },
+        { name: "Registration", href: "/students/register", icon: GraduationCap, roles: ["STAFF"] },
+        { name: "Attendance", href: "/attendance", icon: Calendar, roles: ["STAFF", "STUDENT"] },
+        { name: "Academic", href: "/marks", icon: BookOpen, roles: ["STAFF", "STUDENT"] },
+        { name: "Fees", href: "/fees", icon: CreditCard, roles: ["STAFF", "STUDENT"] },
+        { name: "Notifications", href: "/notifications", icon: Bell, roles: ["STAFF", "STUDENT"] },
+        { name: "Profile", href: "/settings", icon: Settings, roles: ["STAFF", "STUDENT"] },
+    ];
+
+    const navigation = (role === "SUPER_ADMIN" ? adminNavigation : nonAdminNavigation).filter(item => item.roles.includes(role));
+    const badge = roleBadge[role] || roleBadge["SUPER_ADMIN"];
 
     return (
         <div className="min-h-screen bg-slate-50 flex font-sans">
@@ -91,28 +105,27 @@ export default function AdminLayout({ children, userRole = "ADMIN" }: AdminLayou
 
             {/* Sidebar */}
             <aside className={clsx(
-                "fixed inset-y-0 left-0 z-50 flex flex-col transition-all duration-300 ease-in-out md:static md:inset-0 shadow-2xl",
-                "bg-gradient-to-b from-emerald-950 via-emerald-900 to-emerald-950",
+                "fixed inset-y-0 left-0 z-50 flex flex-col transition-all duration-300 ease-in-out md:static md:inset-0 shadow-2xl border-r border-emerald-900/50",
+                "bg-emerald-950",
                 sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
                 collapsed ? "w-20" : "w-72"
             )}>
                 {/* Logo & Toggle */}
-                <div className="flex items-center justify-between h-20 border-b border-emerald-800/50 px-4 relative shrink-0">
-                    <Link href="/" className={clsx("flex items-center gap-3 overflow-hidden", collapsed && "justify-center w-full")}>
+                <div className="flex items-center justify-between h-20 px-6 relative shrink-0">
+                    <Link href="/" className={clsx("flex items-center gap-4 overflow-hidden", collapsed && "justify-center w-full")}>
                         <div className="relative shrink-0">
                             <Image
-                                src="/logo.jpg"
+                                src="/images/college-logo-4k.png"
                                 alt="Logo"
-                                width={collapsed ? 36 : 44}
-                                height={collapsed ? 36 : 44}
-                                className="rounded-full border-2 border-emerald-400/60 shadow-lg"
+                                width={collapsed ? 36 : 40}
+                                height={collapsed ? 36 : 40}
+                                className="rounded-full border-2 border-emerald-50 shadow-lg bg-white object-contain"
                             />
-                            <div className="absolute -bottom-1 -right-1 h-3 w-3 bg-emerald-400 rounded-full border-2 border-emerald-950" />
                         </div>
                         {!collapsed && (
                             <div>
-                                <span className="text-lg font-bold text-white tracking-wide whitespace-nowrap">அகரம்</span>
-                                <p className="text-[10px] text-emerald-400 whitespace-nowrap">Tuition Management</p>
+                                <span className="text-lg font-black text-white tracking-widest uppercase">Aharam</span>
+                                <p className="text-[9px] text-emerald-400 font-bold tracking-[0.2em] uppercase whitespace-nowrap">Tuition System</p>
                             </div>
                         )}
                     </Link>
@@ -120,26 +133,26 @@ export default function AdminLayout({ children, userRole = "ADMIN" }: AdminLayou
                     {/* Desktop Collapse Button */}
                     <button
                         onClick={() => setCollapsed(!collapsed)}
-                        className="hidden md:flex absolute -right-3 top-1/2 -translate-y-1/2 bg-white text-emerald-900 rounded-full p-1 shadow-lg border border-emerald-100 hover:bg-emerald-50 z-50 transition-colors"
+                        className="hidden md:flex absolute -right-3.5 top-1/2 -translate-y-1/2 bg-white text-emerald-900 rounded-full p-1.5 shadow-xl border border-gray-100 hover:bg-emerald-50 hover:scale-110 active:scale-95 z-50 transition-all"
                         title={collapsed ? "Expand" : "Collapse"}
                     >
                         {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
                     </button>
 
-                    <button className="md:hidden text-emerald-300 hover:text-white" onClick={() => setSidebarOpen(false)}>
-                        <X className="h-6 w-6" />
+                    <button className="md:hidden text-emerald-400 hover:text-white transition-colors" onClick={() => setSidebarOpen(false)}>
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 
                 {/* Navigation */}
-                <nav className="flex-1 overflow-y-auto overflow-x-hidden py-5 px-3 space-y-1">
+                <nav className="flex-1 overflow-y-auto overflow-x-hidden py-6 px-4 space-y-1">
                     {!collapsed && (
-                        <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-widest mb-3 px-3">
-                            மெனு
+                        <p className="text-[10px] font-black text-emerald-600/60 uppercase tracking-[0.2em] mb-4 px-3">
+                            Main Menu
                         </p>
                     )}
                     {navigation.map(item => {
-                        const isActive = pathname === item.href;
+                        const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
                         return (
                             <Link
                                 key={item.name}
@@ -147,24 +160,21 @@ export default function AdminLayout({ children, userRole = "ADMIN" }: AdminLayou
                                 title={collapsed ? item.name : ""}
                                 onClick={() => setSidebarOpen(false)}
                                 className={clsx(
-                                    "group flex items-center px-3 py-3 text-sm font-medium rounded-xl transition-all duration-200",
-                                    collapsed ? "justify-center" : "gap-3",
+                                    "group flex items-center px-3 py-3 rounded-2xl transition-all duration-200",
+                                    collapsed ? "justify-center" : "gap-4",
                                     isActive
-                                        ? "bg-white/10 text-white shadow-inner border border-white/10"
-                                        : "text-emerald-200 hover:bg-white/8 hover:text-white"
+                                        ? "bg-emerald-500/10 text-emerald-400"
+                                        : "text-emerald-100/60 hover:bg-emerald-900/50 hover:text-emerald-100"
                                 )}
                             >
                                 <div className={clsx(
-                                    "p-1.5 rounded-lg shrink-0 transition-colors",
-                                    isActive ? "bg-emerald-500/30 text-emerald-300" : "text-emerald-400 group-hover:text-emerald-300"
+                                    "p-2 rounded-xl shrink-0 transition-all duration-300",
+                                    isActive ? "bg-emerald-500/20 text-emerald-400" : "text-emerald-400/50 group-hover:text-emerald-300 group-hover:bg-emerald-800/50"
                                 )}>
                                     <item.icon className="h-4 w-4" />
                                 </div>
                                 {!collapsed && (
-                                    <span className="whitespace-nowrap overflow-hidden text-ellipsis">{item.name}</span>
-                                )}
-                                {!collapsed && isActive && (
-                                    <div className="ml-auto h-2 w-2 rounded-full bg-emerald-400" />
+                                    <span className="text-xs font-bold uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">{item.name}</span>
                                 )}
                             </Link>
                         );
@@ -172,33 +182,17 @@ export default function AdminLayout({ children, userRole = "ADMIN" }: AdminLayou
                 </nav>
 
                 {/* User Section */}
-                <div className="p-4 border-t border-emerald-800/50 bg-emerald-950/40 shrink-0">
-                    <div className={clsx("flex items-center gap-3 mb-3", collapsed ? "justify-center" : "px-1")}>
-                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-600 to-teal-600 flex items-center justify-center text-white font-bold text-sm border-2 border-emerald-500/40 shadow-inner shrink-0">
-                            {username.charAt(0).toUpperCase()}
-                        </div>
-                        {!collapsed && (
-                            <div className="overflow-hidden min-w-0">
-                                <p className="text-sm font-semibold text-white truncate">{username}</p>
-                                <span className={clsx(
-                                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border mt-0.5",
-                                    badge.color
-                                )}>
-                                    {badge.tamilLabel}
-                                </span>
-                            </div>
-                        )}
-                    </div>
+                <div className="p-6 bg-emerald-950 shrink-0 border-t border-emerald-900/30">
                     <button
                         onClick={handleLogout}
                         className={clsx(
-                            "w-full flex items-center px-3 py-2 text-sm font-medium text-emerald-300 rounded-lg hover:bg-red-500/15 hover:text-red-300 transition-all duration-200",
-                            collapsed ? "justify-center" : "gap-3"
+                            "w-full flex items-center px-4 py-3 text-xs font-bold uppercase tracking-wider text-emerald-200/60 rounded-2xl hover:bg-red-500/10 hover:text-red-400 transition-all duration-200",
+                            collapsed ? "justify-center" : "gap-4"
                         )}
                         title={collapsed ? "Logout" : ""}
                     >
                         <LogOut className="h-4 w-4 shrink-0" />
-                        {!collapsed && "வெளியேற (Logout)"}
+                        {!collapsed && "Secure Logout"}
                     </button>
                 </div>
             </aside>
@@ -206,34 +200,32 @@ export default function AdminLayout({ children, userRole = "ADMIN" }: AdminLayou
             {/* Main Content */}
             <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
                 {/* Top Header */}
-                <header className="bg-white/80 backdrop-blur-md shadow-sm h-16 flex items-center justify-between px-4 sm:px-6 border-b border-gray-100 sticky top-0 z-30 shrink-0">
-                    <div className="flex items-center gap-3">
+                <header className="bg-white/80 backdrop-blur-xl shadow-sm h-16 flex items-center justify-between px-6 lg:px-8 border-b border-gray-100 sticky top-0 z-30 shrink-0">
+                    <div className="flex items-center gap-4">
                         <button
-                            className="md:hidden p-2 rounded-xl text-gray-500 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+                            className="md:hidden p-2.5 rounded-xl text-gray-500 hover:text-emerald-700 hover:bg-emerald-50 transition-all active:scale-95"
                             onClick={() => setSidebarOpen(true)}
                         >
                             <Menu className="h-5 w-5" />
                         </button>
                         <div>
-                            <h1 className="text-base font-bold text-gray-900 leading-none">
-                                வணக்கம், {username} 👋
+                            <h1 className="text-sm font-black text-gray-900 uppercase tracking-wide">
+                                Welcome, {username}
                             </h1>
-                            <p className="text-xs text-gray-400 mt-0.5 hidden sm:block">
-                                {new Date().toLocaleDateString("ta-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5 hidden sm:block">
+                                {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <button className="relative p-2 rounded-xl text-gray-500 hover:text-emerald-700 hover:bg-emerald-50 transition-colors">
+                    <div className="flex items-center gap-3">
+                        <button className="relative p-2.5 rounded-xl text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 transition-all">
                             <Bell className="h-5 w-5" />
-                            <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 border border-white" />
+                            <span className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full bg-red-500 border-2 border-white" />
                         </button>
-                        <Link href="/settings" className="p-2 rounded-xl text-gray-500 hover:text-emerald-700 hover:bg-emerald-50 transition-colors">
-                            <Settings className="h-5 w-5" />
-                        </Link>
+                        <div className="h-6 w-px bg-gray-200 hidden sm:block"></div>
                         <div className={clsx(
-                            "hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold",
+                            "hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-wider",
                             badge.color.replace("text-", "text-").replace("bg-", "bg-").replace("border-", "border-"),
                             "bg-emerald-50 text-emerald-800 border-emerald-200"
                         )}>
@@ -243,8 +235,10 @@ export default function AdminLayout({ children, userRole = "ADMIN" }: AdminLayou
                 </header>
 
                 {/* Page Content */}
-                <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-50 p-4 sm:p-6 lg:p-8">
-                    {children}
+                <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50/50 p-6 lg:p-8">
+                    <div className="mx-auto max-w-7xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        {children}
+                    </div>
                 </main>
             </div>
         </div>

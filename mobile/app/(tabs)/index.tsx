@@ -7,7 +7,8 @@ import { router } from 'expo-router';
 import { getAuth, clearAuth } from '../../lib/auth';
 import { apiFetch } from '../../lib/api';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Users, UserCheck, Wallet, XCircle, ScanLine, LogOut, CheckCircle, ChevronRight, GraduationCap } from 'lucide-react-native';
+import { Users, UserCheck, Wallet, XCircle, ScanLine, LogOut, CheckCircle, ChevronRight, GraduationCap, CalendarCheck2, FileText } from 'lucide-react-native';
+import { useLanguage } from '../../lib/i18n';
 
 const { width } = Dimensions.get('window');
 
@@ -34,6 +35,7 @@ function StatCard({ icon: Icon, title, value, gradientColors }: { icon: any; tit
 }
 
 export default function DashboardScreen() {
+    const { t } = useLanguage();
     const [auth, setAuth] = useState<any>({});
     const [stats, setStats] = useState<Stats>({});
     const [loading, setLoading] = useState(true);
@@ -61,7 +63,7 @@ export default function DashboardScreen() {
     const isAdmin = auth.userRole === 'ADMIN';
     const isStaff = auth.userRole === 'STAFF' || isAdmin;
 
-    const roleLabel = isAdmin ? '🔧 System Admin' : isStaff ? '👩‍🏫 Staff Member' : '👨‍👩‍👧 Parent Access';
+    const roleLabel = isAdmin ? t('systemAdmin') : isStaff ? t('staffMember') : t('parentAccess');
 
     return (
         <ScrollView
@@ -73,7 +75,7 @@ export default function DashboardScreen() {
             <LinearGradient colors={['#064e3b', '#047857']} style={styles.banner}>
                 <View style={styles.bannerContent}>
                     <View>
-                        <Text style={styles.bannerGreet}>வணக்கம்! 👋</Text>
+                        <Text style={styles.bannerGreet}>{t('greeting')}</Text>
                         <Text style={styles.bannerName}>{auth.name || auth.username}</Text>
                     </View>
                     <View style={styles.avatarCircle}>
@@ -93,15 +95,15 @@ export default function DashboardScreen() {
                         {isAdmin && (
                             <>
                                 <View style={styles.sectionHeader}>
-                                    <Text style={styles.sectionTitle}>Overview</Text>
+                                    <Text style={styles.sectionTitle}>{t('overview')}</Text>
                                 </View>
                                 <View style={styles.row}>
-                                    <StatCard icon={GraduationCap} title="Total Students" value={stats.totalStudents ?? '—'} gradientColors={['#0ea5e9', '#0284c7']} />
-                                    <StatCard icon={Users} title="Total Staff" value={stats.totalStaff ?? '—'} gradientColors={['#8b5cf6', '#6d28d9']} />
+                                    <StatCard icon={GraduationCap} title={t('totalStudents')} value={stats.totalStudents ?? '—'} gradientColors={['#0ea5e9', '#0284c7']} />
+                                    <StatCard icon={Users} title={t('totalStaff')} value={stats.totalStaff ?? '—'} gradientColors={['#8b5cf6', '#6d28d9']} />
                                 </View>
                                 <View style={styles.row}>
-                                    <StatCard icon={Wallet} title="Fees Collected" value={`Rs.${stats.totalFeesCollected ?? 0}`} gradientColors={['#10b981', '#059669']} />
-                                    <StatCard icon={XCircle} title="Absent Today" value={stats.totalAbsent ?? 0} gradientColors={['#f43f5e', '#e11d48']} />
+                                    <StatCard icon={Wallet} title={t('feesCollected')} value={`Rs.${stats.totalFeesCollected ?? 0}`} gradientColors={['#10b981', '#059669']} />
+                                    <StatCard icon={XCircle} title={t('absentToday')} value={stats.totalAbsent ?? 0} gradientColors={['#f43f5e', '#e11d48']} />
                                 </View>
                             </>
                         )}
@@ -109,11 +111,11 @@ export default function DashboardScreen() {
                         {isStaff && !isAdmin && (
                             <>
                                 <View style={styles.sectionHeader}>
-                                    <Text style={styles.sectionTitle}>Today's Attendance</Text>
+                                    <Text style={styles.sectionTitle}>{t('todaysAttendance')}</Text>
                                 </View>
                                 <View style={styles.row}>
-                                    <StatCard icon={CheckCircle} title="Present" value={stats.totalPresent ?? '—'} gradientColors={['#10b981', '#059669']} />
-                                    <StatCard icon={XCircle} title="Absent" value={stats.totalAbsent ?? '—'} gradientColors={['#f43f5e', '#e11d48']} />
+                                    <StatCard icon={CheckCircle} title={t('present')} value={stats.totalPresent ?? '—'} gradientColors={['#10b981', '#059669']} />
+                                    <StatCard icon={XCircle} title={t('absent')} value={stats.totalAbsent ?? '—'} gradientColors={['#f43f5e', '#e11d48']} />
                                 </View>
                             </>
                         )}
@@ -122,9 +124,9 @@ export default function DashboardScreen() {
                             <View style={styles.parentCard}>
                                 <View style={styles.parentCardHeader}>
                                     <View>
-                                        <Text style={styles.parentCardTitle}>உங்கள் மாணவர்</Text>
+                                        <Text style={styles.parentCardTitle}>{t('yourStudent')}</Text>
                                         <Text style={styles.parentName}>{auth.name}</Text>
-                                        <Text style={styles.parentId}>ID: {auth.username}</Text>
+                                        <Text style={styles.parentId}>{t('idLabel')} {auth.username}</Text>
                                     </View>
                                     <View style={styles.studentIconBox}>
                                         <GraduationCap color="#059669" size={28} />
@@ -136,19 +138,19 @@ export default function DashboardScreen() {
                                         <View style={[styles.quickLinkIcon, { backgroundColor: '#dcfce7' }]}>
                                             <CalendarCheck2 color="#15803d" size={22} />
                                         </View>
-                                        <Text style={styles.quickLinkText}>Attendance</Text>
+                                        <Text style={styles.quickLinkText}>{t('attendance')}</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity style={styles.quickLinkItem} onPress={() => router.navigate('/marks')}>
                                         <View style={[styles.quickLinkIcon, { backgroundColor: '#f3e8ff' }]}>
                                             <FileText color="#7e22ce" size={22} />
                                         </View>
-                                        <Text style={styles.quickLinkText}>Marks</Text>
+                                        <Text style={styles.quickLinkText}>{t('marks')}</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity style={styles.quickLinkItem} onPress={() => router.navigate('/fees')}>
                                         <View style={[styles.quickLinkIcon, { backgroundColor: '#fef08a' }]}>
                                             <Wallet color="#a16207" size={22} />
                                         </View>
-                                        <Text style={styles.quickLinkText}>Fees</Text>
+                                        <Text style={styles.quickLinkText}>{t('fees')}</Text>
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -158,32 +160,32 @@ export default function DashboardScreen() {
                         {isStaff && (
                             <>
                                 <View style={styles.sectionHeader}>
-                                    <Text style={styles.sectionTitle}>Quick Actions</Text>
+                                    <Text style={styles.sectionTitle}>{t('quickActions')}</Text>
                                 </View>
                                 <View style={styles.actionGrid}>
                                     <TouchableOpacity style={styles.actionBtn} onPress={() => router.navigate('/scan')}>
                                         <LinearGradient colors={['#10b981', '#059669']} style={styles.actionIconBg}>
                                             <ScanLine color="#fff" size={28} />
                                         </LinearGradient>
-                                        <Text style={styles.actionBtnLabel}>QR Scan</Text>
+                                        <Text style={styles.actionBtnLabel}>{t('scan')}</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity style={styles.actionBtn} onPress={() => router.navigate('/attendance')}>
                                         <View style={[styles.actionIconBg, { backgroundColor: '#f1f5f9' }]}>
                                             <CalendarCheck2 color="#334155" size={28} />
                                         </View>
-                                        <Text style={styles.actionBtnLabel}>Attendance</Text>
+                                        <Text style={styles.actionBtnLabel}>{t('attendance')}</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity style={styles.actionBtn} onPress={() => router.navigate('/marks')}>
                                         <View style={[styles.actionIconBg, { backgroundColor: '#f1f5f9' }]}>
                                             <FileText color="#334155" size={28} />
                                         </View>
-                                        <Text style={styles.actionBtnLabel}>Marks</Text>
+                                        <Text style={styles.actionBtnLabel}>{t('marks')}</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity style={styles.actionBtn} onPress={() => router.navigate('/fees')}>
                                         <View style={[styles.actionIconBg, { backgroundColor: '#f1f5f9' }]}>
                                             <Wallet color="#334155" size={28} />
                                         </View>
-                                        <Text style={styles.actionBtnLabel}>Fees</Text>
+                                        <Text style={styles.actionBtnLabel}>{t('fees')}</Text>
                                     </TouchableOpacity>
                                 </View>
                             </>
@@ -194,7 +196,7 @@ export default function DashboardScreen() {
                 {/* Logout */}
                 <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
                     <LogOut color="#dc2626" size={20} />
-                    <Text style={styles.logoutText}>Logout</Text>
+                    <Text style={styles.logoutText}>{t('logout')}</Text>
                 </TouchableOpacity>
             </View>
         </ScrollView>
