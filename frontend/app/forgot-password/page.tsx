@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { Loader2, Mail, KeyRound, Eye, EyeOff, Lock, ArrowLeft, CheckCircle, AlertCircle, ShieldCheck } from "lucide-react";
 import clsx from "clsx";
 import api from "@/lib/axios";
+import { getApiErrorMessage } from "@/lib/error-utils";
+import { isSixDigitOtp, isStrongPassword, isValidEmail } from "@/lib/validation";
 
 function PasswordStrengthBar({ password }: { password: string }) {
     const getStrength = () => {
@@ -45,33 +47,48 @@ export default function ForgotPasswordPage() {
 
     const handleSendOtp = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!isValidEmail(email)) {
+            setError("Please enter a valid email address.");
+            return;
+        }
         setLoading(true); setError(null);
         try {
-            await api.post("/auth/forgot-password", { email });
+            await api.post("/auth/forgot-password", { email: email.trim() });
             setStep(2);
-        } catch (err: any) { setError(err.message || "Failed to send OTP."); }
+        } catch (err: any) { setError(getApiErrorMessage(err, "Failed to send OTP.")); }
         finally { setLoading(false); }
     };
 
     const handleVerifyOtp = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!isSixDigitOtp(otp)) {
+            setError("OTP must be a 6-digit number.");
+            return;
+        }
         setLoading(true); setError(null);
         try {
-            await api.post("/auth/verify-otp", { email, otp });
+            await api.post("/auth/verify-otp", { email: email.trim(), otp: otp.trim() });
             setStep(3);
-        } catch (err: any) { setError(err.message || "Invalid or expired OTP."); }
+        } catch (err: any) { setError(getApiErrorMessage(err, "Invalid or expired OTP.")); }
         finally { setLoading(false); }
     };
 
     const handleResetPassword = async (e: React.FormEvent) => {
         e.preventDefault();
         if (newPassword !== confirmPassword) { setError("Passwords do not match."); return; }
-        if (newPassword.length < 6) { setError("Password must be at least 6 characters."); return; }
+        if (!isStrongPassword(newPassword)) {
+            setError("Password must be at least 8 characters and include upper, lower, number, and special character.");
+            return;
+        }
         setLoading(true); setError(null);
         try {
-            await api.post("/auth/reset-password", { email, otp, newPassword });
+            await api.post("/auth/reset-password", {
+                email: email.trim(),
+                otp: otp.trim(),
+                newPassword,
+            });
             setStep(4);
-        } catch (err: any) { setError(err.message || "Failed to reset password."); }
+        } catch (err: any) { setError(getApiErrorMessage(err, "Failed to reset password.")); }
         finally { setLoading(false); }
     };
 
@@ -118,7 +135,7 @@ export default function ForgotPasswordPage() {
                                 </div>
                                 <p className="text-xs text-gray-400 mt-2">Enter the email address registered with your account.</p>
                             </div>
-                            <button type="submit" disabled={loading || !email}
+                            <button type="submit" disabled={loading || !isValidEmail(email)}
                                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50">
                                 {loading ? <Loader2 className="animate-spin h-5 w-5" /> : <><Mail className="h-4 w-4" /> Send Verification Code</>}
                             </button>
@@ -140,7 +157,7 @@ export default function ForgotPasswordPage() {
                                     placeholder="——————"
                                 />
                             </div>
-                            <button type="submit" disabled={loading || otp.length !== 6}
+                            <button type="submit" disabled={loading || !isSixDigitOtp(otp)}
                                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50">
                                 {loading ? <Loader2 className="animate-spin h-5 w-5" /> : <><ShieldCheck className="h-4 w-4" /> Verify Code</>}
                             </button>
@@ -186,7 +203,9 @@ export default function ForgotPasswordPage() {
                                     <p className="text-xs text-emerald-600 font-medium flex items-center gap-1 mt-1"><CheckCircle className="h-3 w-3" /> Passwords match</p>
                                 )}
                             </div>
-                            <button type="submit" disabled={loading || !newPassword || newPassword !== confirmPassword}
+                            <button
+                                type="submit"
+                                disabled={loading || !newPassword || newPassword !== confirmPassword || !isStrongPassword(newPassword)}
                                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50">
                                 {loading ? <Loader2 className="animate-spin h-5 w-5" /> : <><Lock className="h-4 w-4" /> Reset Password</>}
                             </button>

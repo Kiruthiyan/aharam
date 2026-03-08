@@ -1,0 +1,33 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/aharam_test
+    username: postgres
+    password: postgres
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: true
+  mail:
+    host: localhost
+    port: 2525
+    username: ""
+    password: ""
+
+server:
+  port: 0
+
+app:
+  jwtSecret: test-only-jwt-secret-test-only-jwt-secret-1234567890abcdef
+  jwtExpirationMs: 86400000
+  seed:
+    default-admin:
+      enabled: false
+    default-staff:
+      enabled: false
+
+notification:
+  provider: mock

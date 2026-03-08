@@ -2,12 +2,17 @@ package com.aharam.tuition.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
 @Data
 @Table(name = "exams")
+@SQLDelete(sql = "UPDATE exams SET deleted_at = CURRENT_TIMESTAMP WHERE id=?")
+@SQLRestriction("deleted_at IS NULL")
 public class Exam {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

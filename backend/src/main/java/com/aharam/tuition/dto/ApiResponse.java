@@ -29,9 +29,11 @@ public class ApiResponse<T> {
     }
 
     public static <T> ApiResponse<T> error(String message, String errorCode) {
+        String safeMessage = (message == null || message.isBlank()) ? "An unexpected error occurred." : message;
         return ApiResponse.<T>builder()
                 .status("error")
-                .message(message)
+                .data(null)
+                .message(safeMessage)
                 .errorCode(errorCode)
                 .build();
     }

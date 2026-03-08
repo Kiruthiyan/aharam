@@ -1,64 +1,167 @@
 "use client";
 
 import AdminLayout from "@/components/AdminLayout";
-import { BookOpen, Calendar, CheckCircle2, Shield, AlertTriangle, GraduationCap, XCircle, TrendingUp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { BookOpen, Calendar, CheckCircle2, AlertTriangle, GraduationCap, TrendingUp } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
+import api from "@/lib/axios";
+
+type AttendanceRow = {
+    id: number;
+    date: string;
+    status: "PRESENT" | "ABSENT" | "LATE";
+};
+
+type MarkRow = {
+    id: number;
+    examId?: number;
+    examName?: string;
+    marksObtained?: number;
+    grade?: string;
+    updatedAt?: string;
+};
+
+type FeeRow = {
+    id: number;
+    month: string;
+    status: "PAID" | "PENDING";
+    updatedAt?: string;
+};
+
+type StudentProfile = {
+    fullName?: string;
+};
+
+type Activity = {
+    title: string;
+    date: string;
+    type: "academic" | "attendance" | "fee";
+    sortKey: number;
+};
 
 type StudentStats = {
-    attendancePct?: number;
-    presentDays?: number;
-    absentDays?: number;
-    totalExams?: number;
-    averageScore?: number;
-    pendingFees?: number;
-    recentActivities?: Array<{
+    attendancePct: number;
+    presentDays: number;
+    absentDays: number;
+    totalExams: number;
+    averageScore: number;
+    pendingFees: number;
+    recentActivities: Array<{
         title: string;
         date: string;
         type: "academic" | "attendance" | "fee";
     }>;
 };
 
+const unwrapData = <T,>(payload: unknown): T => {
+    if (payload && typeof payload === "object" && "data" in payload) {
+        return (payload as { data: T }).data;
+    }
+    return payload as T;
+};
+
+const toEpoch = (value?: string): number => {
+    if (!value) {
+        return 0;
+    }
+    const t = new Date(value).getTime();
+    return Number.isFinite(t) ? t : 0;
+};
+
 export default function StudentDashboard() {
-    const [stats, setStats] = useState<StudentStats>({});
+    const [stats, setStats] = useState<StudentStats>({
+        attendancePct: 0,
+        presentDays: 0,
+        absentDays: 0,
+        totalExams: 0,
+        averageScore: 0,
+        pendingFees: 0,
+        recentActivities: [],
+    });
     const [studentName, setStudentName] = useState<string>("");
 
     useEffect(() => {
-        // This simulates a fetch since the backend StudentStats endpoint might not be fully built yet
-        // In a real scenario, we'll fetch from `/api/dashboard/stats`
-        const storedName = localStorage.getItem("name") || localStorage.getItem("username") || "Student";
-        setStudentName(storedName);
+        const loadDashboard = async () => {
+            try {
+                const [profileRes, attendanceRes, marksRes, feesRes] = await Promise.all([
+                    api.get("/student-dashboard/profile"),
+                    api.get("/student-dashboard/attendance"),
+                    api.get("/student-dashboard/marks"),
+                    api.get("/student-dashboard/fees"),
+                ]);
 
-        // Mock data for the static UI build:
-        setStats({
-            attendancePct: 92.5,
-            presentDays: 148,
-            absentDays: 12,
-            totalExams: 6,
-            averageScore: 78.4,
-            pendingFees: 0,
-            recentActivities: [
-                { title: "Term 2 Full Exam Graded", date: "Today", type: "academic" },
-                { title: "January Tuition Fee Paid", date: "Jan 5", type: "fee" },
-                { title: "Absent: General Maths", date: "Jan 2", type: "attendance" },
-            ]
-        });
+                const profile = unwrapData<StudentProfile>(profileRes);
+                const attendance = unwrapData<AttendanceRow[]>(attendanceRes);
+                const marks = unwrapData<MarkRow[]>(marksRes);
+                const fees = unwrapData<FeeRow[]>(feesRes);
+
+                setStudentName(profile.fullName || localStorage.getItem("name") || localStorage.getItem("username") || "Student");
+
+                const presentDays = attendance.filter((r) => r.status === "PRESENT" || r.status === "LATE").length;
+                const absentDays = attendance.filter((r) => r.status === "ABSENT").length;
+                const attendancePct = attendance.length === 0 ? 0 : Number(((presentDays * 100) / attendance.length).toFixed(1));
+
+                const totalExams = new Set(marks.map((m) => m.examId)).size;
+                const scoreRows = marks.filter((m) => typeof m.marksObtained === "number") as Array<MarkRow & { marksObtained: number }>;
+                const averageScore = scoreRows.length === 0
+                    ? 0
+                    : Number((scoreRows.reduce((sum, row) => sum + row.marksObtained, 0) / scoreRows.length).toFixed(1));
+
+                const pendingFees = fees.filter((f) => f.status === "PENDING").length;
+
+                const activities: Activity[] = [
+                    ...marks.map((m) => ({
+                        type: "academic" as const,
+                        title: `${m.examName || "Exam"} graded (${m.grade || "-"})`,
+                        date: m.updatedAt ? new Date(m.updatedAt).toLocaleDateString("en-GB") : "-",
+                        sortKey: toEpoch(m.updatedAt),
+                    })),
+                    ...fees.map((f) => ({
+                        type: "fee" as const,
+                        title: `${f.month} fee status: ${f.status}`,
+                        date: f.updatedAt ? new Date(f.updatedAt).toLocaleDateString("en-GB") : "-",
+                        sortKey: toEpoch(f.updatedAt),
+                    })),
+                    ...attendance.map((a) => ({
+                        type: "attendance" as const,
+                        title: `Attendance marked: ${a.status}`,
+                        date: a.date,
+                        sortKey: toEpoch(a.date),
+                    })),
+                ]
+                    .sort((a, b) => b.sortKey - a.sortKey)
+                    .slice(0, 6);
+
+                setStats({
+                    attendancePct,
+                    presentDays,
+                    absentDays,
+                    totalExams,
+                    averageScore,
+                    pendingFees,
+                    recentActivities: activities.map(({ title, date, type }) => ({ title, date, type })),
+                });
+            } catch {
+                setStudentName(localStorage.getItem("name") || localStorage.getItem("username") || "Student");
+            }
+        };
+
+        loadDashboard();
     }, []);
+
+    const feeCardLabel = useMemo(() => (stats.pendingFees > 0 ? "Pending Fee Records" : "No Pending Fees"), [stats.pendingFees]);
 
     return (
         <AdminLayout userRole="STUDENT">
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                {/* Welcome Banner */}
                 <div className="mb-6 p-6 sm:p-8 bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-950 rounded-3xl text-white relative overflow-hidden shadow-2xl">
                     <div className="absolute inset-0 opacity-20">
                         <div className="absolute top-0 right-0 w-72 h-72 bg-emerald-400 rounded-full translate-x-32 -translate-y-32 blur-3xl opacity-50" />
                         <div className="absolute bottom-0 left-0 w-64 h-64 bg-teal-300 rounded-full -translate-x-32 translate-y-32 blur-3xl opacity-30" />
                     </div>
                     <div className="relative z-10">
-                        <p className="text-emerald-300 text-[10px] font-black tracking-[0.3em] uppercase mb-3">
-                            Student Hub
-                        </p>
+                        <p className="text-emerald-300 text-[10px] font-black tracking-[0.3em] uppercase mb-3">Student Hub</p>
                         <h2 className="text-2xl sm:text-3xl font-black tracking-tight mt-2 flex items-center gap-3">
                             <GraduationCap className="h-8 w-8 text-emerald-400" />
                             Digital Report Card
@@ -69,7 +172,6 @@ export default function StudentDashboard() {
                     </div>
                 </div>
 
-                {/* Key Metrics */}
                 <div className="grid grid-cols-2 gap-4">
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6 hover:shadow-lg transition-all duration-300 group">
                         <div className="p-2 sm:p-3 rounded-xl bg-emerald-50 w-fit text-emerald-600 mb-3 sm:mb-4 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
@@ -97,34 +199,29 @@ export default function StudentDashboard() {
 
                     <div className={clsx(
                         "rounded-2xl border shadow-sm p-4 sm:p-6 hover:shadow-lg transition-all duration-300 group",
-                        stats.pendingFees && stats.pendingFees > 0 ? "bg-red-50/50 border-red-100" : "bg-white border-gray-100"
+                        stats.pendingFees > 0 ? "bg-red-50/50 border-red-100" : "bg-white border-gray-100"
                     )}>
                         <div className={clsx(
                             "p-2 sm:p-3 rounded-xl w-fit mb-3 sm:mb-4 transition-colors",
-                            stats.pendingFees && stats.pendingFees > 0
+                            stats.pendingFees > 0
                                 ? "bg-red-100 text-red-600 group-hover:bg-red-600 group-hover:text-white"
                                 : "bg-teal-50 text-teal-600 group-hover:bg-teal-600 group-hover:text-white"
                         )}>
-                            {stats.pendingFees && stats.pendingFees > 0 ? <AlertTriangle className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
+                            {stats.pendingFees > 0 ? <AlertTriangle className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
                         </div>
-                        <div className="flex items-baseline gap-1">
-                            <span className="text-sm font-bold text-gray-400">Rs.</span>
-                            <p className="text-2xl sm:text-4xl font-black text-gray-900 tracking-tighter">{stats.pendingFees}</p>
-                        </div>
-                        <p className="text-[9px] sm:text-[10px] text-gray-400 mt-1.5 font-bold uppercase tracking-widest">Pending Fees</p>
+                        <p className="text-2xl sm:text-4xl font-black text-gray-900 tracking-tighter">{stats.pendingFees}</p>
+                        <p className="text-[9px] sm:text-[10px] text-gray-400 mt-1.5 font-bold uppercase tracking-widest">{feeCardLabel}</p>
                     </div>
                 </div>
 
-                {/* Main Content Split */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Activity Feed */}
                     <div className="lg:col-span-2 bg-white rounded-3xl border border-gray-100 shadow-sm p-8">
                         <div className="flex items-center justify-between gap-4 mb-8">
                             <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest">Recent Activity Feed</h3>
                         </div>
                         <div className="space-y-4">
-                            {stats.recentActivities?.map((act, i) => (
-                                <div key={i} className="flex items-start gap-4 p-4 rounded-2xl hover:bg-gray-50 border border-transparent hover:border-emerald-100 transition-colors">
+                            {stats.recentActivities.map((act, i) => (
+                                <div key={`${act.type}-${i}`} className="flex items-start gap-4 p-4 rounded-2xl hover:bg-gray-50 border border-transparent hover:border-emerald-100 transition-colors">
                                     <div className={clsx(
                                         "p-2.5 rounded-xl shrink-0",
                                         act.type === "academic" ? "bg-blue-50 text-blue-600" :
@@ -141,10 +238,12 @@ export default function StudentDashboard() {
                                     </div>
                                 </div>
                             ))}
+                            {stats.recentActivities.length === 0 && (
+                                <div className="text-sm text-gray-400">No recent activity yet.</div>
+                            )}
                         </div>
                     </div>
 
-                    {/* Quick Links */}
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8">
                         <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest mb-8">Quick Actions</h3>
                         <div className="space-y-3">

@@ -38,12 +38,12 @@ function openWhatsApp(phone: string, text: string) {
 
 async function postNotification(payload: Omit<Notice, "at" | "id">): Promise<Notice> {
   const res: any = await api.post("/notifications/send", payload);
-  return res.data || res;
+  return (res && typeof res === "object" && "data" in res ? res.data : res) as Notice;
 }
 
 async function fetchNotifications(): Promise<Notice[]> {
   const res: any = await api.get("/notifications");
-  return res.data || res;
+  return (res && typeof res === "object" && "data" in res ? res.data : res) as Notice[];
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
@@ -101,44 +101,16 @@ export default function NotificationsPage() {
     try {
       const result = await postNotification({ title, message, audience, channel });
 
-      // Add the sent notice to local list optimistically
-      setNotices(prev => [{
-        ...result,
-        id: result.id ?? Date.now(),
-        at: result.at || new Date().toLocaleString("en-GB"),
-        status: "SENT"
-      }, ...prev]);
+      setNotices(prev => [result, ...prev]);
 
       const channels = channel === "BOTH" ? "App + WhatsApp" : channel === "WHATSAPP" ? "WhatsApp" : "App";
       setSuccess(`🎉 Notification successfully sent to ${audience === "ALL" ? "everyone" : audience.toLowerCase()} via ${channels}.`);
       setTitle("");
       setMessage("");
+      loadNotifications();
       setTimeout(() => setSuccess(null), 5000);
     } catch (e: any) {
-      setError(null);
-      const localNotice: Notice = {
-        id: Date.now(),
-        title, message, audience, channel,
-        sentBy: username,
-        at: new Date().toLocaleString("en-GB"),
-        status: "PENDING"
-      };
-      setNotices(prev => [localNotice, ...prev]);
-
-      if (channel === "WHATSAPP" || channel === "BOTH") {
-        setSuccess("📲 Preparing manual WhatsApp send (Backend disconnected).");
-        setTimeout(() => {
-          openWhatsApp("", `📢 *${title}*\n\n${message}\n\n— Aharam Academy`);
-          setTitle("");
-          setMessage("");
-          setSuccess(null);
-        }, 1500);
-      } else {
-        setSuccess("✓ App Notification saved locally. (Backend disconnected).");
-        setTitle("");
-        setMessage("");
-        setTimeout(() => setSuccess(null), 4000);
-      }
+      setError(e?.message || "Failed to send notification.");
     } finally {
       setSending(false);
     }
@@ -395,13 +367,7 @@ export default function NotificationsPage() {
                 </div>
 
                 {/* Mock Chat Area */}
-                <div className="p-5 bg-[#efeae2] h-[400px] overflow-y-auto relative flex flex-col justify-end chat-bg">
-                  <style dangerouslySetInnerHTML={{
-                    __html: `
-                    .chat-bg { background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 20.5V18H0v-2h20v-2H0v-2h20v-2H0V8h20V6H0V4h20V2H0V0h22v20h2V0h2v20h2V0h2v20h2V0h2v20h2V0h2v20h2v2H20v-1.5zM0 20h2v20H0V20zm4 0h2v20H4V20zm4 0h2v20H8V20zm4 0h2v20h-2V20zm4 0h2v20h-2V20zm4 4v16h2V24h-2zm4 0v16h2V24h-2zm4 0v16h2V24h-2zm4 0v16h2V24h-2zm4 0v16h2V24h-2z' fill='%23d9d3cb' fill-opacity='0.4' fill-rule='evenodd'/%3E%3C/svg%3E"); }
-                  `}} />
-
-                  {/* The Message Bubble */}
+                <div className="p-5 bg-[#efeae2] h-[400px] overflow-y-auto relative flex flex-col justify-end chat-bg">`n{/* The Message Bubble */}
                   <div className="bg-white rounded-2xl rounded-tl-sm p-3 shadow-sm inline-block max-w-[90%] self-start relative animate-in zoom-in-95 duration-300">
                     <div className="absolute top-0 -left-2 w-0 h-0 border-t-[10px] border-t-white border-l-[10px] border-l-transparent"></div>
                     <p className="text-xs text-gray-800 font-medium whitespace-pre-wrap leading-relaxed">
@@ -548,3 +514,4 @@ export default function NotificationsPage() {
     </AdminLayout>
   );
 }
+

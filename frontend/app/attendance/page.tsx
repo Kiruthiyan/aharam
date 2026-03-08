@@ -1,27 +1,33 @@
 "use client";
 
 import AdminLayout from "@/components/AdminLayout";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-    Calendar, Check, X, Loader2,
-    Barcode, User, Users, Clock, Shield, AlertCircle,
-    CheckCircle2, TrendingUp, Filter, BarChart3, Info,
-    Search, MapPin, RefreshCw, PieChart, ZapIcon
+    AlertCircle,
+    Barcode,
+    Check,
+    CheckCircle2,
+    Clock,
+    Loader2,
+    MapPin,
+    RefreshCw,
+    Search,
+    Shield,
+    Users,
+    X,
 } from "lucide-react";
+import type { ComponentType } from "react";
 import clsx from "clsx";
 import { useToast } from "@/components/Toast";
 import api from "@/lib/axios";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+type Role = "SUPER_ADMIN" | "STAFF" | "STUDENT";
 
 interface Student {
     studentId: string;
     fullName: string;
     examBatch?: number;
     center?: string;
-    gender?: string;
-    barcode?: string;
-    phone?: string;
 }
 
 interface AttendanceRecord {
@@ -32,567 +38,604 @@ interface AttendanceRecord {
     status: "PRESENT" | "ABSENT" | "LATE";
     method: "BARCODE" | "MANUAL";
     markedBy?: { fullName: string; id: number };
-    batchOrClass?: string;
     center?: string;
 }
 
-// ── Shared Components ─────────────────────────────────────────────────────────
+const normalizeAttendanceRecord = (raw: any): AttendanceRecord => ({
+    id: raw?.id,
+    student: {
+        studentId: raw?.student?.studentId ?? raw?.studentId ?? "",
+        fullName: raw?.student?.fullName ?? raw?.studentName ?? "-",
+        examBatch: raw?.student?.examBatch,
+        center: raw?.student?.center ?? raw?.center,
+    },
+    date: raw?.date,
+    time: raw?.time,
+    status: raw?.status,
+    method: raw?.method,
+    markedBy: raw?.markedBy ?? (raw?.markedById ? { fullName: `ID ${raw.markedById}`, id: raw.markedById } : undefined),
+    center: raw?.center,
+});
+
+const unwrapData = <T,>(payload: unknown): T => {
+    if (payload && typeof payload === "object" && "data" in payload) {
+        return (payload as { data: T }).data;
+    }
+    return payload as T;
+};
+
+const getErrorMessage = (err: unknown, fallback: string): string => {
+    if (err && typeof err === "object" && "message" in err) {
+        const maybe = (err as { message?: unknown }).message;
+        if (typeof maybe === "string" && maybe.trim()) return maybe;
+    }
+    return fallback;
+};
 
 function StatusBadge({ status }: { status: "PRESENT" | "ABSENT" | "LATE" }) {
+    const style =
+        status === "PRESENT"
+            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+            : status === "LATE"
+                ? "bg-amber-50 text-amber-700 border-amber-200"
+                : "bg-red-50 text-red-700 border-red-200";
     return (
-        <span className={clsx(
-            "inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border",
-            status === "PRESENT" && "bg-emerald-50 text-emerald-700 border-emerald-200",
-            status === "LATE" && "bg-amber-50 text-amber-700 border-amber-200",
-            status === "ABSENT" && "bg-red-50 text-red-700 border-red-200",
-        )}>
+        <span className={clsx("inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border", style)}>
             {status}
         </span>
     );
 }
 
-function StatCard({ title, value, sub, icon: Icon, color }: {
-    title: string; value: string | number; sub?: string; icon: any; color: string;
+function StatCard({ title, value, icon: Icon, tone }: {
+    title: string;
+    value: string | number;
+    icon: ComponentType<{ className?: string }>;
+    tone: "emerald" | "blue" | "amber" | "slate";
 }) {
+    const toneClass = {
+        emerald: "bg-emerald-50 text-emerald-700 border-emerald-100",
+        blue: "bg-blue-50 text-blue-700 border-blue-100",
+        amber: "bg-amber-50 text-amber-700 border-amber-100",
+        slate: "bg-slate-50 text-slate-700 border-slate-100",
+    }[tone];
+
     return (
-        <div className="bg-white p-4 sm:p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 group hover:shadow-md transition-all">
-            <div className={clsx("h-10 w-10 sm:h-14 sm:w-14 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105", color)}>
-                <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+            <div className={clsx("inline-flex p-2.5 rounded-xl border", toneClass)}>
+                <Icon className="h-5 w-5" />
             </div>
-            <div className="min-w-0">
-                <p className="text-xl sm:text-3xl font-black tracking-tight text-gray-900 leading-none">{value}</p>
-                <p className="text-[9px] sm:text-[10px] uppercase font-black text-gray-400 tracking-widest mt-1 truncate">
-                    {title}{sub && <span className="text-gray-300 ml-1 font-bold">{sub}</span>}
-                </p>
-            </div>
+            <p className="text-2xl font-black text-gray-900 mt-3">{value}</p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mt-1">{title}</p>
         </div>
     );
 }
 
-// ── Staff View ────────────────────────────────────────────────────────────────
-
 function StaffAttendanceView({ userId }: { userId: string }) {
     const { toast } = useToast();
     const barcodeRef = useRef<HTMLInputElement>(null);
-    const searchRef = useRef<HTMLInputElement>(null);
 
-    // Helpers
-    const openWhatsApp = (phone: string, text: string) => {
-        if (!phone) return;
-        const clean = phone.replace(/\D/g, "");
-        const number = clean.startsWith("0") ? "94" + clean.slice(1) : clean;
-        window.open(`https://wa.me/${number}?text=${encodeURIComponent(text)}`, "_blank");
-    };
+    const [students, setStudents] = useState<Student[]>([]);
+    const [batches, setBatches] = useState<string[]>([]);
+    const [centers, setCenters] = useState<string[]>([]);
 
-    // Session config
-    const [batch, setBatch] = useState("2026");
-    const [center, setCenter] = useState("KOKUVIL");
+    const [batch, setBatch] = useState("");
+    const [center, setCenter] = useState("");
     const [targetDate, setTargetDate] = useState(new Date().toISOString().split("T")[0]);
+    const [sessionActive, setSessionActive] = useState(false);
 
-    // Session state
-    const [isSessionActive, setIsSessionActive] = useState(false);
-    const [scannedBarcode, setScannedBarcode] = useState("");
-    const [sessionRecords, setSessionRecords] = useState<AttendanceRecord[]>([]);
-    const [loadingAction, setLoadingAction] = useState<string | null>(null);
+    const [barcodeValue, setBarcodeValue] = useState("");
+    const [records, setRecords] = useState<AttendanceRecord[]>([]);
+    const [loading, setLoading] = useState(false);
 
-    // Manual search
-    const [allStudents, setAllStudents] = useState<Student[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
-    const [showSearch, setShowSearch] = useState(false);
-    const [loadingStudents, setLoadingStudents] = useState(false);
+    const staffIdNum = Number(userId);
 
-    // Focus barcode when session activates
+    const loadStudents = async () => {
+        try {
+            const res = await api.get("/students");
+            const all = unwrapData<Student[]>(res).filter((s: Student) => Boolean(s?.studentId));
+            setStudents(all);
+
+            const derivedBatches = Array.from(
+                new Set(all.map((s) => s.examBatch?.toString()).filter(Boolean) as string[])
+            ).sort();
+            const derivedCenters = Array.from(
+                new Set(all.map((s) => s.center).filter((c): c is string => Boolean(c && c.trim())))
+            ).sort();
+
+            setBatches(derivedBatches);
+            setCenters(derivedCenters);
+            if (!batch) setBatch(derivedBatches[0] || String(new Date().getFullYear()));
+            if (!center) setCenter(derivedCenters[0] || "");
+        } catch (e) {
+            console.error(e);
+            toast("error", "Failed to load students.");
+        }
+    };
+
     useEffect(() => {
-        if (isSessionActive && barcodeRef.current) {
-            barcodeRef.current.focus();
-        }
-    }, [isSessionActive]);
+        loadStudents();
+    }, []);
 
-    // Load batch students when session starts
-    const startSession = async () => {
-        setLoadingStudents(true);
-        try {
-            const data: any = await api.get("/students");
-            const all: Student[] = data.data || data;
-            setAllStudents(all.filter(s => s.examBatch?.toString() === batch));
-        } catch (e) { console.error(e); }
-        setLoadingStudents(false);
-        setIsSessionActive(true);
-    };
+    useEffect(() => {
+        if (sessionActive) barcodeRef.current?.focus();
+    }, [sessionActive]);
 
-    // Barcode scan handler
-    const handleBarcodeSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!scannedBarcode.trim() || !isSessionActive) return;
-
-        setLoadingAction("scan");
-        try {
-            const res: any = await api.post("/attendance/scan", { barcode: scannedBarcode.trim(), staffId: userId, batch, center });
-            const rec: AttendanceRecord = res.data || res;
-            addOrUpdate(rec);
-            toast("success", `✔ ${rec.student.fullName} — PRESENT`);
-            setScannedBarcode("");
-        } catch (err: any) {
-            toast("error", err.message || "Barcode not recognised");
-            setScannedBarcode("");
-        } finally {
-            setLoadingAction(null);
-            barcodeRef.current?.focus();
-        }
-    };
-
-    // Manual mark handler
-    const markManual = async (studentId: string, status: "PRESENT" | "LATE" | "ABSENT") => {
-        setLoadingAction(studentId + status);
-        try {
-            const res: any = await api.post("/attendance/mark-manual", { studentId, status, staffId: userId, date: targetDate });
-            const rec: AttendanceRecord = res.data || res;
-            addOrUpdate(rec);
-            toast("success", `${status}: ${rec.student.fullName}`);
-
-            // Auto-message parent
-            if (rec.student?.phone) {
-                const emoji = status === "PRESENT" ? "✅" : status === "LATE" ? "⏳" : "❌";
-                const statusWord = status.toLowerCase();
-                openWhatsApp(rec.student.phone, `${emoji} *Attendance Update*\n\n${rec.student.fullName} is ${statusWord} today (${new Date().toLocaleDateString("en-GB")}).\n\n— Aharam Academy`);
-            }
-
-            setSearchQuery("");
-            setShowSearch(false);
-        } catch (err: any) {
-            toast("error", err.message || "Failed to mark attendance.");
-        } finally {
-            setLoadingAction(null);
-        }
-    };
-
-    const addOrUpdate = (rec: AttendanceRecord) => {
-        setSessionRecords(prev => [rec, ...prev.filter(r => r.student.studentId !== rec.student.studentId)]);
-    };
-
-    // End session
-    const endSession = async () => {
-        if (!confirm("End session? All unmarked students in this batch will be marked ABSENT.")) return;
-        setLoadingAction("end");
-        try {
-            await api.post("/attendance/end-session", { batch, date: targetDate, staffId: userId });
-            setIsSessionActive(false);
-            toast("info", "Session closed. Auto-absent processed for unmarked students.");
-            setSessionRecords([]);
-        } catch (err: any) {
-            toast("error", err.message || "Error ending session.");
-        } finally {
-            setLoadingAction(null);
-        }
-    };
-
-    const stats = useMemo(() => ({
-        present: sessionRecords.filter(r => r.status === "PRESENT").length,
-        late: sessionRecords.filter(r => r.status === "LATE").length,
-        absent: sessionRecords.filter(r => r.status === "ABSENT").length,
-        barcode: sessionRecords.filter(r => r.method === "BARCODE").length,
-        total: sessionRecords.length,
-    }), [sessionRecords]);
+    const filteredStudents = useMemo(
+        () =>
+            students.filter(
+                (s) =>
+                    (!batch || s.examBatch?.toString() === batch) &&
+                    (!center || s.center === center)
+            ),
+        [students, batch, center]
+    );
 
     const searchResults = useMemo(() => {
         if (!searchQuery.trim()) return [];
         const q = searchQuery.toLowerCase();
-        return allStudents.filter(s =>
-            s.fullName.toLowerCase().includes(q) || s.studentId.toLowerCase().includes(q)
-        ).slice(0, 6);
-    }, [searchQuery, allStudents]);
+        return filteredStudents
+            .filter(
+                (s) =>
+                    s.fullName.toLowerCase().includes(q) ||
+                    s.studentId.toLowerCase().includes(q)
+            )
+            .slice(0, 8);
+    }, [searchQuery, filteredStudents]);
 
-    // Which students are already marked
-    const markedIds = new Set(sessionRecords.map(r => r.student.studentId));
+    const ensureStaffId = () => {
+        if (!Number.isFinite(staffIdNum)) {
+            toast("error", "Invalid staff session. Please log in again.");
+            return false;
+        }
+        return true;
+    };
+
+    const upsertRecord = (rec: AttendanceRecord) => {
+        setRecords((prev) => [rec, ...prev.filter((r) => r.student.studentId !== rec.student.studentId)]);
+    };
+
+    const startSession = () => {
+        setSessionActive(true);
+        setRecords([]);
+        setSearchQuery("");
+    };
+
+    const scanBarcode = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!sessionActive || !barcodeValue.trim() || !ensureStaffId()) return;
+        setLoading(true);
+        try {
+            const res = await api.post("/attendance/scan", {
+                barcode: barcodeValue.trim(),
+                staffId: staffIdNum,
+                batch,
+                center,
+            });
+            const rec = normalizeAttendanceRecord(unwrapData<any>(res));
+            upsertRecord(rec);
+            toast("success", `${rec.student.fullName} marked PRESENT`);
+            setBarcodeValue("");
+        } catch (err: unknown) {
+            toast("error", getErrorMessage(err, "Barcode not recognized."));
+        } finally {
+            setLoading(false);
+            barcodeRef.current?.focus();
+        }
+    };
+
+    const markManual = async (studentId: string, status: "PRESENT" | "LATE" | "ABSENT") => {
+        if (!ensureStaffId()) return;
+        setLoading(true);
+        try {
+            const res = await api.post("/attendance/mark-manual", {
+                studentId,
+                status,
+                staffId: staffIdNum,
+                date: targetDate,
+            });
+            const rec = normalizeAttendanceRecord(unwrapData<any>(res));
+            upsertRecord(rec);
+            toast("success", `${rec.student.fullName} marked ${status}`);
+            setSearchQuery("");
+        } catch (err: unknown) {
+            toast("error", getErrorMessage(err, "Failed to mark attendance."));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const endSession = async () => {
+        if (!ensureStaffId()) return;
+        setLoading(true);
+        try {
+            await api.post("/attendance/end-session", {
+                batch,
+                date: targetDate,
+                staffId: staffIdNum,
+            });
+            setSessionActive(false);
+            toast("info", "Session ended. Remaining students marked absent.");
+        } catch (err: unknown) {
+            toast("error", getErrorMessage(err, "Failed to end session."));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const stats = useMemo(() => {
+        const present = records.filter((r) => r.status === "PRESENT").length;
+        const late = records.filter((r) => r.status === "LATE").length;
+        const absent = records.filter((r) => r.status === "ABSENT").length;
+        const total = records.length;
+        return { present, late, absent, total };
+    }, [records]);
 
     return (
-        <div className="flex flex-col gap-4 sm:gap-8 max-w-6xl mx-auto pb-20">
-            {/* ── Config Panel ─────────────────────────────────────────── */}
-            <div className="bg-white p-4 sm:p-8 rounded-[2rem] border border-gray-100 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div className="space-y-6 max-w-6xl mx-auto pb-20">
+            <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                     <div>
-                        <h1 className="text-xl sm:text-2xl font-black tracking-tight text-gray-900 flex items-center gap-3">
-                            <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl sm:rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-sm shrink-0">
-                                <Shield className="h-4 w-4 sm:h-5 sm:w-5" />
-                            </div>
+                        <h1 className="text-2xl font-black text-gray-900 flex items-center gap-3">
+                            <Shield className="h-6 w-6 text-emerald-700" />
                             Attendance Session
                         </h1>
-                        <p className="text-xs sm:text-sm text-gray-400 mt-2 font-medium ml-12 border-l-2 border-emerald-100 pl-3">
-                            {isSessionActive
-                                ? <span className="flex items-center gap-2 text-emerald-600 font-bold"><span className="relative flex h-2 w-2"><span className="animate-ping absolute h-2 w-2 rounded-full bg-emerald-400 opacity-75" /><span className="h-2 w-2 rounded-full bg-emerald-500" /></span>Session active — scanning for {center}</span>
-                                : "Configure center and batch, then start session."}
+                        <p className="text-sm text-gray-500 mt-1">
+                            Configure session and mark attendance using barcode or manual search.
                         </p>
                     </div>
-
-                    <div className="flex items-center gap-3 shrink-0">
-                        {!isSessionActive ? (
-                            <button
-                                onClick={startSession}
-                                disabled={loadingStudents}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-sm tracking-widest uppercase shadow-lg shadow-emerald-900/20 hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed"
-                            >
-                                {loadingStudents ? <Loader2 className="h-5 w-5 animate-spin" /> : <Clock className="h-5 w-5" />}
-                                Start Session
-                            </button>
-                        ) : (
-                            <button
-                                onClick={endSession}
-                                disabled={loadingAction === "end"}
-                                className="bg-white border-2 border-red-100 hover:bg-red-50 text-red-600 hover:text-red-700 px-8 py-4 rounded-2xl font-black text-sm tracking-widest uppercase transition-all flex items-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
-                            >
-                                {loadingAction === "end" ? <Loader2 className="h-5 w-5 animate-spin" /> : <X className="h-5 w-5" />}
-                                End &amp; Auto-Absent
-                            </button>
-                        )}
-                    </div>
+                    {!sessionActive ? (
+                        <button
+                            onClick={startSession}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl font-bold text-sm"
+                        >
+                            Start Session
+                        </button>
+                    ) : (
+                        <button
+                            onClick={endSession}
+                            disabled={loading}
+                            className="bg-white border border-red-200 text-red-600 hover:bg-red-50 px-5 py-3 rounded-xl font-bold text-sm"
+                        >
+                            End Session
+                        </button>
+                    )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mt-8 p-6 bg-gray-50/50 rounded-[1.5rem] border border-gray-100">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
                     <div>
-                        <label className="block text-[10px] font-black tracking-widest text-gray-400 uppercase mb-3">Center</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Center</label>
                         <select
-                            disabled={isSessionActive}
-                            value={center} onChange={e => setCenter(e.target.value)}
-                            className="w-full px-5 py-4 rounded-xl border border-gray-200 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 bg-white transition-all font-bold text-gray-700 cursor-pointer hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                            disabled={sessionActive}
+                            value={center}
+                            onChange={(e) => setCenter(e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm font-semibold"
                         >
-                            <option value="KOKUVIL">KOKUVIL</option>
-                            <option value="MALLAKAM">MALLAKAM</option>
+                            {centers.map((c) => (
+                                <option key={c} value={c}>{c}</option>
+                            ))}
                         </select>
                     </div>
                     <div>
-                        <label className="block text-[10px] font-black tracking-widest text-gray-400 uppercase mb-3">Batch / Year</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Batch</label>
                         <select
-                            disabled={isSessionActive}
-                            value={batch} onChange={e => setBatch(e.target.value)}
-                            className="w-full px-5 py-4 rounded-xl border border-gray-200 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 bg-white transition-all font-bold text-gray-700 cursor-pointer hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                            disabled={sessionActive}
+                            value={batch}
+                            onChange={(e) => setBatch(e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm font-semibold"
                         >
-                            <option>2024</option><option>2025</option><option>2026</option><option>2027</option>
+                            {batches.map((b) => (
+                                <option key={b} value={b}>{b}</option>
+                            ))}
                         </select>
                     </div>
                     <div>
-                        <label className="block text-[10px] font-black tracking-widest text-gray-400 uppercase mb-3">Session Date</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Date</label>
                         <input
-                            disabled={isSessionActive}
-                            type="date" value={targetDate}
-                            onChange={e => setTargetDate(e.target.value)}
-                            className="w-full px-5 py-4 rounded-xl border border-gray-200 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 bg-white transition-all font-bold text-gray-700 cursor-pointer hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                            disabled={sessionActive}
+                            type="date"
+                            value={targetDate}
+                            onChange={(e) => setTargetDate(e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm font-semibold"
                         />
                     </div>
                 </div>
             </div>
 
-            {/* ── Active Session Area ───────────────────────────────────── */}
-            {isSessionActive && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {/* Barcode Scanner */}
-                    <div className="bg-emerald-950 rounded-[2rem] p-8 md:p-10 text-white shadow-xl relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-8 opacity-5 flex items-center justify-center transform group-hover:scale-110 group-hover:rotate-6 transition-all duration-700">
-                            <Barcode className="h-64 w-64" />
-                        </div>
-                        <div className="relative z-10">
-                            <h2 className="text-xl font-black mb-2 flex items-center gap-3 text-emerald-50">
-                                <div className="h-10 w-10 rounded-2xl bg-emerald-900 border border-emerald-800 flex items-center justify-center text-emerald-400 shadow-inner">
-                                    <ZapIcon className="h-5 w-5" />
-                                </div>
-                                Barcode Scanner
-                            </h2>
-                            <p className="text-emerald-400/80 text-sm font-medium mb-8 ml-13">Scan card — system will mark PRESENT instantly.</p>
-                            <form onSubmit={handleBarcodeSubmit} className="relative">
-                                <Barcode className="absolute left-6 top-1/2 -translate-y-1/2 h-6 w-6 text-emerald-600 pointer-events-none" />
-                                <input
-                                    ref={barcodeRef}
-                                    type="text"
-                                    placeholder="Scan or type barcode..."
-                                    value={scannedBarcode}
-                                    onChange={e => setScannedBarcode(e.target.value)}
-                                    className="w-full bg-white text-gray-900 pl-16 pr-6 py-5 rounded-2xl text-xl font-mono tracking-widest focus:ring-4 focus:ring-emerald-500/50 outline-none shadow-inner placeholder:text-gray-300 font-bold"
-                                />
-                                {loadingAction === "scan" && (
-                                    <Loader2 className="absolute right-6 top-1/2 -translate-y-1/2 h-6 w-6 text-emerald-600 animate-spin" />
-                                )}
-                            </form>
-                        </div>
-                    </div>
+            {sessionActive && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <section className="bg-emerald-950 rounded-[2rem] p-6 text-white">
+                        <h2 className="text-xl font-black flex items-center gap-2">
+                            <Barcode className="h-5 w-5" />
+                            Barcode Scanner
+                        </h2>
+                        <p className="text-sm text-emerald-200 mt-1">Scan student card to mark PRESENT instantly.</p>
+                        <form onSubmit={scanBarcode} className="mt-4 relative">
+                            <input
+                                ref={barcodeRef}
+                                value={barcodeValue}
+                                onChange={(e) => setBarcodeValue(e.target.value)}
+                                placeholder="Scan barcode or type student ID"
+                                className="w-full px-4 py-4 rounded-xl text-gray-900 font-semibold"
+                            />
+                            {loading && (
+                                <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-700 animate-spin" />
+                            )}
+                        </form>
+                    </section>
 
-                    {/* Manual Search */}
-                    <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-8 md:p-10">
-                        <h2 className="text-xl font-black text-gray-900 mb-2 flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-sm">
-                                <Search className="h-5 w-5" />
-                            </div>
+                    <section className="bg-white rounded-[2rem] p-6 border border-gray-100 shadow-sm">
+                        <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
+                            <Search className="h-5 w-5 text-blue-600" />
                             Manual Mark
                         </h2>
-                        <p className="text-sm text-gray-400 mb-8 font-medium ml-13">Search student by name or ID, then mark status.</p>
-                        <div className="relative">
-                            <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <p className="text-sm text-gray-500 mt-1">Search student and set attendance status manually.</p>
+                        <div className="relative mt-4">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                             <input
-                                ref={searchRef}
-                                type="text"
-                                placeholder="Name or Student ID..."
                                 value={searchQuery}
-                                onChange={e => { setSearchQuery(e.target.value); setShowSearch(true); }}
-                                onFocus={() => setShowSearch(true)}
-                                className="w-full bg-gray-50/50 border border-gray-200 pl-14 pr-5 py-5 rounded-2xl text-base font-bold outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all placeholder:text-gray-300 shadow-inner"
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search by name or student ID"
+                                className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 text-sm font-semibold"
                             />
                         </div>
 
-                        {showSearch && searchResults.length > 0 && (
-                            <div className="mt-2 border border-gray-100 rounded-xl overflow-hidden shadow-lg">
-                                {searchResults.map(s => {
-                                    const marked = markedIds.has(s.studentId);
-                                    const rec = sessionRecords.find(r => r.student.studentId === s.studentId);
-                                    return (
-                                        <div key={s.studentId} className="flex items-center justify-between p-3 hover:bg-gray-50 border-b border-gray-50 last:border-0">
-                                            <div>
-                                                <p className="font-bold text-sm text-gray-900">{s.fullName}</p>
-                                                <p className="text-[10px] text-gray-400 font-mono">{s.studentId}</p>
-                                            </div>
-                                            <div className="flex items-center gap-1.5">
-                                                {marked ? (
-                                                    <StatusBadge status={rec!.status} />
-                                                ) : null}
-                                                <button
-                                                    onClick={() => markManual(s.studentId, "PRESENT")}
-                                                    disabled={loadingAction === s.studentId + "PRESENT"}
-                                                    title="Mark Present"
-                                                    className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition-colors"
-                                                >
-                                                    {loadingAction === s.studentId + "PRESENT" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                                                </button>
-                                                <button
-                                                    onClick={() => markManual(s.studentId, "LATE")}
-                                                    title="Mark Late"
-                                                    className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg transition-colors"
-                                                >
-                                                    <Clock className="h-4 w-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => markManual(s.studentId, "ABSENT")}
-                                                    title="Mark Absent"
-                                                    className="p-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg transition-colors"
-                                                >
-                                                    <X className="h-4 w-4" />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                        {showSearch && searchQuery && searchResults.length === 0 && (
-                            <p className="mt-4 text-center text-sm text-gray-400 py-4">No students found matching "{searchQuery}"</p>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* ── Session Stats ─────────────────────────────────────────── */}
-            {isSessionActive && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <StatCard title="Present Rate" value={stats.total > 0 ? Math.round((stats.present / stats.total) * 100) + "%" : "0%"} icon={TrendingUp} color="bg-emerald-50 text-emerald-600" />
-                    <StatCard title="Barcode Scans" value={stats.barcode} icon={Barcode} color="bg-blue-50 text-blue-600" />
-                    <StatCard title="Late Arrivals" value={stats.late} icon={Clock} color="bg-amber-50 text-amber-500" />
-                    <StatCard title="Total Marked" value={stats.total} icon={Users} color="bg-purple-50 text-purple-600" />
-                </div>
-            )}
-
-            {/* ── Attendance Log Table ──────────────────────────────────── */}
-            <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-8 py-6 border-b border-gray-100 bg-gradient-to-r from-emerald-50/50 to-transparent flex items-center justify-between gap-4 flex-wrap">
-                    <h3 className="font-black text-gray-900 flex items-center gap-3 text-lg">
-                        <div className="h-8 w-8 rounded-xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700">
-                            <Filter className="h-4 w-4" />
+                        <div className="mt-3 max-h-72 overflow-auto">
+                            {searchQuery && searchResults.length === 0 && (
+                                <p className="text-sm text-gray-400 py-4">No matching students.</p>
+                            )}
+                            {searchResults.map((s) => (
+                                <div key={s.studentId} className="flex items-center justify-between gap-2 py-2 border-b border-gray-100">
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-bold text-gray-900 truncate">{s.fullName}</p>
+                                        <p className="text-xs text-gray-500">{s.studentId}</p>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => markManual(s.studentId, "PRESENT")}
+                                            className="p-2 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                            title="Present"
+                                        >
+                                            <Check className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => markManual(s.studentId, "LATE")}
+                                            className="p-2 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                            title="Late"
+                                        >
+                                            <Clock className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => markManual(s.studentId, "ABSENT")}
+                                            className="p-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100"
+                                            title="Absent"
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                        Live Attendance Log
-                    </h3>
-                    <div className="flex items-center gap-6 text-[10px] font-black uppercase tracking-widest bg-white py-2 px-4 rounded-xl border border-gray-100 shadow-sm">
-                        <span className="text-emerald-600 flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5" /> {stats.present} Present</span>
-                        <span className="text-amber-500 flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" /> {stats.late} Late</span>
-                        <span className="text-red-500 flex items-center gap-1.5"><X className="h-3.5 w-3.5" /> {stats.absent} Absent</span>
-                    </div>
+                    </section>
                 </div>
-                <div className="overflow-auto max-h-[500px] scrollbar-hide">
-                    <table className="w-full text-left text-sm">
-                        <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
+            )}
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard title="Present" value={stats.present} icon={CheckCircle2} tone="emerald" />
+                <StatCard title="Late" value={stats.late} icon={Clock} tone="amber" />
+                <StatCard title="Absent" value={stats.absent} icon={AlertCircle} tone="slate" />
+                <StatCard title="Total Marked" value={stats.total} icon={Users} tone="blue" />
+            </div>
+
+            <section className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <h3 className="font-black text-gray-900">Live Attendance Log</h3>
+                    <span className="text-xs text-gray-500 font-bold">{records.length} records</span>
+                </div>
+                <div className="overflow-auto max-h-[520px]">
+                    <table className="w-full text-sm">
+                        <thead className="bg-gray-50 sticky top-0">
                             <tr>
-                                {["Student", "Time", "Status", "Method", "Actions"].map(h => (
-                                    <th key={h} className={clsx("px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest", h === "Actions" && "text-right")}>{h}</th>
+                                {["Student", "Date", "Time", "Status", "Method"].map((h) => (
+                                    <th key={h} className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">{h}</th>
                                 ))}
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {sessionRecords.length === 0 ? (
+                        <tbody className="divide-y divide-gray-100">
+                            {records.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="py-24 text-center">
-                                        <div className="flex flex-col items-center gap-4 text-gray-300">
-                                            <div className="h-16 w-16 rounded-full bg-gray-50 flex items-center justify-center border border-gray-100">
-                                                <Info className="h-8 w-8 text-gray-400" />
-                                            </div>
-                                            <p className="font-bold text-gray-500 tracking-wide">
-                                                {isSessionActive ? "Start scanning — records will appear here." : "Start a session to begin marking attendance."}
-                                            </p>
-                                        </div>
-                                    </td>
+                                    <td colSpan={5} className="px-6 py-16 text-center text-gray-400">No attendance records in this session.</td>
                                 </tr>
                             ) : (
-                                sessionRecords.map(rec => (
-                                    <tr key={rec.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="p-4">
-                                            <p className="font-bold text-gray-900">{rec.student.fullName}</p>
-                                            <p className="text-[10px] font-mono text-gray-400">{rec.student.studentId}</p>
+                                records.map((r) => (
+                                    <tr key={r.id}>
+                                        <td className="px-6 py-3">
+                                            <p className="font-bold text-gray-900">{r.student.fullName}</p>
+                                            <p className="text-xs text-gray-500">{r.student.studentId}</p>
                                         </td>
-                                        <td className="p-4 font-mono text-gray-500 text-xs whitespace-nowrap">{rec.time || "—"}</td>
-                                        <td className="p-4"><StatusBadge status={rec.status} /></td>
-                                        <td className="p-4">
-                                            <span className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-lg border border-gray-150 w-fit">
-                                                {rec.method === "BARCODE" ? <Barcode className="h-3 w-3" /> : <User className="h-3 w-3" />}
-                                                {rec.method}
-                                            </span>
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            {isSessionActive && (
-                                                <div className="flex items-center justify-end gap-1">
-                                                    <button onClick={() => markManual(rec.student.studentId, "PRESENT")} title="Mark Present" className="p-1.5 hover:bg-emerald-50 text-emerald-600 rounded-lg transition-colors"><CheckCircle2 className="h-4 w-4" /></button>
-                                                    <button onClick={() => markManual(rec.student.studentId, "LATE")} title="Mark Late" className="p-1.5 hover:bg-amber-50 text-amber-600 rounded-lg transition-colors"><Clock className="h-4 w-4" /></button>
-                                                    <button onClick={() => markManual(rec.student.studentId, "ABSENT")} title="Mark Absent" className="p-1.5 hover:bg-red-50 text-red-600 rounded-lg transition-colors"><X className="h-4 w-4" /></button>
-                                                </div>
-                                            )}
-                                        </td>
+                                        <td className="px-6 py-3 text-gray-600 font-medium">{r.date}</td>
+                                        <td className="px-6 py-3 text-gray-600 font-mono">{r.time || "-"}</td>
+                                        <td className="px-6 py-3"><StatusBadge status={r.status} /></td>
+                                        <td className="px-6 py-3 text-gray-600 font-semibold">{r.method}</td>
                                     </tr>
                                 ))
                             )}
                         </tbody>
                     </table>
                 </div>
-            </div>
+            </section>
         </div>
     );
 }
 
-// ── Admin View ────────────────────────────────────────────────────────────────
-
 function AdminAttendanceView() {
     const [records, setRecords] = useState<AttendanceRecord[]>([]);
+    const [allBatches, setAllBatches] = useState<string[]>([]);
+    const [allCenters, setAllCenters] = useState<string[]>([]);
+    const [batch, setBatch] = useState("");
+    const [centerFilter, setCenterFilter] = useState("ALL");
     const [loading, setLoading] = useState(false);
     const [range, setRange] = useState({
         start: new Date().toISOString().split("T")[0],
-        end: new Date().toISOString().split("T")[0]
+        end: new Date().toISOString().split("T")[0],
     });
-    const [batch, setBatch] = useState("2026");
-    const [centerFilter, setCenterFilter] = useState("ALL");
 
-    const fetchData = async () => {
-        setLoading(true);
+    const loadMeta = async () => {
         try {
-            const data: any = await api.get(`/attendance/batch/${batch}?start=${range.start}&end=${range.end}`);
-            setRecords(data.data || data);
-        } catch (e) { console.error(e); } finally { setLoading(false); }
+            const res = await api.get("/students");
+            const students = unwrapData<Student[]>(res);
+            const batches = Array.from(
+                new Set(students.map((s) => s.examBatch?.toString()).filter(Boolean) as string[])
+            ).sort();
+            const centers = Array.from(
+                new Set(students.map((s) => s.center).filter((c): c is string => Boolean(c && c.trim())))
+            ).sort();
+            setAllBatches(batches);
+            setAllCenters(centers);
+            if (!batch) setBatch(batches[0] || String(new Date().getFullYear()));
+        } catch (e) {
+            console.error(e);
+        }
     };
 
-    useEffect(() => { fetchData(); }, [batch, range]);
+    const fetchData = async (selectedBatch: string) => {
+        if (!selectedBatch) return;
+        setLoading(true);
+        try {
+            const res = await api.get(
+                `/attendance/batch/${selectedBatch}?start=${range.start}&end=${range.end}`
+            );
+            setRecords(unwrapData<any[]>(res).map(normalizeAttendanceRecord));
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
 
-    const filtered = useMemo(() =>
-        centerFilter === "ALL" ? records : records.filter(r => r.center === centerFilter),
+    useEffect(() => {
+        loadMeta();
+    }, []);
+
+    useEffect(() => {
+        if (batch) fetchData(batch);
+    }, [batch, range.start, range.end]);
+
+    const filtered = useMemo(
+        () => (centerFilter === "ALL" ? records : records.filter((r) => r.center === centerFilter)),
         [records, centerFilter]
     );
 
-    const stats = useMemo(() => ({
-        present: filtered.filter(r => r.status === "PRESENT").length,
-        late: filtered.filter(r => r.status === "LATE").length,
-        absent: filtered.filter(r => r.status === "ABSENT").length,
-        total: filtered.length,
-    }), [filtered]);
+    const stats = useMemo(() => {
+        const present = filtered.filter((r) => r.status === "PRESENT").length;
+        const late = filtered.filter((r) => r.status === "LATE").length;
+        const absent = filtered.filter((r) => r.status === "ABSENT").length;
+        const total = filtered.length;
+        const rate = total === 0 ? 0 : Math.round(((present + late) * 100) / total);
+        return { present, late, absent, total, rate };
+    }, [filtered]);
 
     return (
-        <div className="space-y-8 max-w-7xl mx-auto pb-20">
-            {/* Header Panel */}
-            <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+        <div className="space-y-6 max-w-7xl mx-auto pb-20">
+            <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5">
                     <div>
-                        <h1 className="text-2xl font-black text-gray-900 flex items-center gap-3 tracking-tight">
-                            <div className="h-10 w-10 rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-sm">
-                                <BarChart3 className="h-5 w-5" />
-                            </div>
-                            Attendance Analytics
-                        </h1>
-                        <p className="text-sm text-gray-400 mt-2 font-medium ml-13 border-l-2 border-emerald-100 pl-3">Overview of all recorded attendance sessions.</p>
+                        <h1 className="text-2xl font-black text-gray-900">Attendance Analytics</h1>
+                        <p className="text-sm text-gray-500 mt-1">Filter and review attendance records by date, batch, and center.</p>
                     </div>
-                    <button onClick={fetchData} className="flex items-center gap-3 text-sm font-black tracking-widest uppercase text-gray-500 hover:text-emerald-700 border-2 border-gray-100 bg-gray-50 hover:bg-emerald-50 hover:border-emerald-200 px-6 py-3.5 rounded-2xl transition-all shadow-sm">
-                        <RefreshCw className="h-4 w-4" /> Refresh
+                    <button
+                        onClick={() => fetchData(batch)}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 hover:bg-gray-50"
+                    >
+                        <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
+                        Refresh
                     </button>
                 </div>
 
-                {/* Filters */}
-                <div className="flex flex-wrap gap-4 items-center">
-                    <div className="flex items-center gap-3 bg-gray-50/50 border border-gray-200 px-5 py-3.5 rounded-2xl shadow-inner focus-within:ring-4 focus-within:ring-emerald-500/10 focus-within:border-emerald-500 transition-all">
-                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Batch</span>
-                        <select value={batch} onChange={e => setBatch(e.target.value)} className="bg-transparent text-sm font-bold text-gray-700 outline-none cursor-pointer">
-                            <option>2024</option><option>2025</option><option>2026</option><option>2027</option>
-                        </select>
-                    </div>
-                    <div className="flex items-center gap-3 bg-gray-50/50 border border-gray-200 px-5 py-3.5 rounded-2xl shadow-inner focus-within:ring-4 focus-within:ring-emerald-500/10 focus-within:border-emerald-500 transition-all">
-                        <MapPin className="h-4 w-4 text-emerald-600" />
-                        <select value={centerFilter} onChange={e => setCenterFilter(e.target.value)} className="bg-transparent text-sm font-bold text-gray-700 outline-none cursor-pointer">
-                            <option value="ALL">All Centers</option>
-                            <option>KOKUVIL</option><option>MALLAKAM</option>
-                        </select>
-                    </div>
-                    <div className="flex items-center gap-3 bg-gray-50/50 border border-gray-200 px-5 py-3.5 rounded-2xl shadow-inner focus-within:ring-4 focus-within:ring-emerald-500/10 focus-within:border-emerald-500 transition-all">
-                        <Calendar className="h-4 w-4 text-emerald-600" />
-                        <input type="date" value={range.start} onChange={e => setRange({ ...range, start: e.target.value })} className="bg-transparent text-sm font-bold text-gray-700 outline-none cursor-pointer" />
-                        <span className="text-gray-300 font-bold mx-1">→</span>
-                        <input type="date" value={range.end} onChange={e => setRange({ ...range, end: e.target.value })} className="bg-transparent text-sm font-bold text-gray-700 outline-none cursor-pointer" />
-                    </div>
-                </div>
-
-                {/* Summary Stats */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mt-8 p-6 bg-gray-50/50 rounded-[1.5rem] border border-gray-100">
-                    <StatCard title="Attendance Rate" value={stats.total > 0 ? Math.round((stats.present / stats.total) * 100) + "%" : "0%"} icon={PieChart} color="bg-emerald-50 text-emerald-600 border border-emerald-100" />
-                    <StatCard title="Present" sub="Today" value={stats.present} icon={CheckCircle2} color="bg-emerald-50 text-emerald-600 border border-emerald-100" />
-                    <StatCard title="Late" sub="Arrivals" value={stats.late} icon={Clock} color="bg-amber-50 text-amber-500 border border-amber-100" />
-                    <StatCard title="Absent" value={stats.absent} icon={AlertCircle} color="bg-red-50 text-red-500 border border-red-100" />
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <select
+                        value={batch}
+                        onChange={(e) => setBatch(e.target.value)}
+                        className="px-4 py-3 rounded-xl border border-gray-200 text-sm font-semibold bg-white"
+                    >
+                        {allBatches.map((b) => (
+                            <option key={b} value={b}>Batch {b}</option>
+                        ))}
+                    </select>
+                    <select
+                        value={centerFilter}
+                        onChange={(e) => setCenterFilter(e.target.value)}
+                        className="px-4 py-3 rounded-xl border border-gray-200 text-sm font-semibold bg-white"
+                    >
+                        <option value="ALL">All Centers</option>
+                        {allCenters.map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                        ))}
+                    </select>
+                    <input
+                        type="date"
+                        value={range.start}
+                        onChange={(e) => setRange((prev) => ({ ...prev, start: e.target.value }))}
+                        className="px-4 py-3 rounded-xl border border-gray-200 text-sm font-semibold bg-white"
+                    />
+                    <input
+                        type="date"
+                        value={range.end}
+                        onChange={(e) => setRange((prev) => ({ ...prev, end: e.target.value }))}
+                        className="px-4 py-3 rounded-xl border border-gray-200 text-sm font-semibold bg-white"
+                    />
                 </div>
             </div>
 
-            {/* Records Table */}
-            <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
-                <div className="p-8 border-b border-gray-100 bg-gradient-to-r from-emerald-50/50 to-transparent flex items-center justify-between">
-                    <h3 className="font-black text-gray-900 flex items-center gap-3 text-lg">
-                        <div className="h-8 w-8 rounded-xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700">
-                            <Filter className="h-4 w-4" />
-                        </div>
-                        Detailed Log
-                    </h3>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-200">{filtered.length} records</span>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard title="Attendance Rate" value={`${stats.rate}%`} icon={CheckCircle2} tone="emerald" />
+                <StatCard title="Present" value={stats.present} icon={CheckCircle2} tone="blue" />
+                <StatCard title="Late" value={stats.late} icon={Clock} tone="amber" />
+                <StatCard title="Absent" value={stats.absent} icon={AlertCircle} tone="slate" />
+            </div>
+
+            <section className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <h3 className="font-black text-gray-900">Detailed Attendance Log</h3>
+                    <span className="text-xs font-bold text-gray-500">{filtered.length} records</span>
                 </div>
-                <div className="overflow-auto max-h-[580px] scrollbar-hide">
+                <div className="overflow-auto max-h-[620px]">
                     {loading ? (
-                        <div className="py-24 flex justify-center"><Loader2 className="h-10 w-10 animate-spin text-emerald-500" /></div>
+                        <div className="py-20 flex justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+                        </div>
                     ) : (
-                        <table className="w-full text-left text-sm whitespace-nowrap">
-                            <thead className="bg-gray-50/50 border-b border-gray-100 sticky top-0 z-10 backdrop-blur-md">
+                        <table className="w-full text-sm whitespace-nowrap">
+                            <thead className="bg-gray-50 sticky top-0">
                                 <tr>
-                                    {["Date", "Student", "Center", "Status", "Time", "Method", "Staff"].map(h => (
-                                        <th key={h} className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
+                                    {["Date", "Student", "Center", "Status", "Time", "Method", "Staff"].map((h) => (
+                                        <th key={h} className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">{h}</th>
                                     ))}
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-50">
+                            <tbody className="divide-y divide-gray-100">
                                 {filtered.length === 0 ? (
-                                    <tr><td colSpan={7} className="py-20 text-center text-gray-400 font-bold">No records found for this range.</td></tr>
+                                    <tr>
+                                        <td colSpan={7} className="px-6 py-16 text-center text-gray-400">No attendance records found for this filter.</td>
+                                    </tr>
                                 ) : (
-                                    filtered.map(r => (
-                                        <tr key={r.id} className="hover:bg-emerald-50/30 transition-colors">
-                                            <td className="px-8 py-4 font-bold text-xs text-gray-700">{r.date}</td>
-                                            <td className="px-8 py-4">
+                                    filtered.map((r) => (
+                                        <tr key={r.id}>
+                                            <td className="px-6 py-3 text-gray-700 font-semibold">{r.date}</td>
+                                            <td className="px-6 py-3">
                                                 <p className="font-bold text-gray-900">{r.student.fullName}</p>
-                                                <p className="text-[10px] text-gray-400 font-mono tracking-wider">{r.student.studentId}</p>
+                                                <p className="text-xs text-gray-500">{r.student.studentId}</p>
                                             </td>
-                                            <td className="px-8 py-4 text-xs font-bold text-gray-500">{r.center || "—"}</td>
-                                            <td className="px-8 py-4"><StatusBadge status={r.status} /></td>
-                                            <td className="px-8 py-4 font-mono text-xs text-gray-500">{r.time || "—"}</td>
-                                            <td className="px-8 py-4 text-xs font-bold text-gray-500">{r.method}</td>
-                                            <td className="px-8 py-4 text-xs text-gray-500">{r.markedBy?.fullName || "System"}</td>
+                                            <td className="px-6 py-3 text-gray-600">
+                                                <span className="inline-flex items-center gap-1">
+                                                    <MapPin className="h-3.5 w-3.5" />
+                                                    {r.center || "-"}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-3"><StatusBadge status={r.status} /></td>
+                                            <td className="px-6 py-3 text-gray-600 font-mono">{r.time || "-"}</td>
+                                            <td className="px-6 py-3 text-gray-600 font-semibold">{r.method}</td>
+                                            <td className="px-6 py-3 text-gray-600">{r.markedBy?.fullName || "System"}</td>
                                         </tr>
                                     ))
                                 )}
@@ -600,139 +643,95 @@ function AdminAttendanceView() {
                         </table>
                     )}
                 </div>
-            </div>
+            </section>
         </div>
     );
 }
 
-// ── Student View ──────────────────────────────────────────────────────────────
-
-function StudentAttendanceView({ userId }: { userId: string }) {
+function StudentAttendanceView() {
     const [records, setRecords] = useState<AttendanceRecord[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const fetch_ = async () => {
+        const load = async () => {
             try {
-                const data: any = await api.get(`/attendance/student/${userId}`);
-                setRecords(data.data || data);
-            } catch (e) { console.error(e); } finally { setLoading(false); }
+                const res = await api.get("/student-dashboard/attendance");
+                setRecords(unwrapData<any[]>(res).map(normalizeAttendanceRecord));
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setLoading(false);
+            }
         };
-        if (userId) fetch_();
-    }, [userId]);
+        load();
+    }, []);
 
     const stats = useMemo(() => {
-        const present = records.filter(r => r.status === "PRESENT" || r.status === "LATE").length;
-        const absent = records.filter(r => r.status === "ABSENT").length;
-        const late = records.filter(r => r.status === "LATE").length;
+        const present = records.filter((r) => r.status === "PRESENT" || r.status === "LATE").length;
+        const absent = records.filter((r) => r.status === "ABSENT").length;
+        const late = records.filter((r) => r.status === "LATE").length;
         const total = records.length;
-        return { present, absent, late, total, pct: total > 0 ? Math.round((present / total) * 100) : 0 };
+        const pct = total === 0 ? 0 : Math.round((present * 100) / total);
+        return { present, absent, late, total, pct };
     }, [records]);
 
     return (
-        <div className="max-w-4xl mx-auto space-y-8 pb-20">
-            {/* Summary Hero */}
-            <div className="bg-emerald-950 rounded-[2.5rem] p-10 text-white shadow-xl relative overflow-hidden group">
-                <div className="absolute -bottom-10 -right-10 opacity-5 transform group-hover:scale-110 group-hover:rotate-12 transition-all duration-700"><CheckCircle2 className="h-72 w-72" /></div>
-                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-10">
-                    <div>
-                        <h2 className="text-4xl font-black mb-3 text-emerald-50 tracking-tight">My Attendance</h2>
-                        <p className="text-emerald-400 font-bold text-sm tracking-wide">Consistency drives success 🚀</p>
-                    </div>
-                    <div className="flex items-center gap-10 bg-emerald-900/50 p-6 rounded-[2rem] border border-emerald-800/50 backdrop-blur-sm">
-                        <div className="h-28 w-28 rounded-full border-8 border-emerald-500/30 bg-emerald-800/50 flex flex-col items-center justify-center shadow-inner">
-                            <span className="text-4xl font-black text-white">{stats.pct}%</span>
-                            <span className="text-[9px] font-black uppercase text-emerald-400 tracking-widest mt-1">Rate</span>
-                        </div>
-                        <div className="space-y-4">
-                            <div className="flex items-center gap-3 text-sm font-bold text-emerald-50"><div className="h-3 w-3 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" /> {stats.present} Attended</div>
-                            <div className="flex items-center gap-3 text-sm font-bold text-emerald-50"><div className="h-3 w-3 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]" /> {stats.late} Late</div>
-                            <div className="flex items-center gap-3 text-sm font-bold text-emerald-50"><div className="h-3 w-3 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]" /> {stats.absent} Absent</div>
-                        </div>
-                    </div>
+        <div className="max-w-4xl mx-auto space-y-6 pb-20">
+            <div className="bg-emerald-950 rounded-[2rem] p-8 text-white">
+                <h2 className="text-3xl font-black">My Attendance</h2>
+                <p className="text-sm text-emerald-200 mt-1">Attendance summary and history.</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
+                    <StatCard title="Rate" value={`${stats.pct}%`} icon={CheckCircle2} tone="emerald" />
+                    <StatCard title="Present" value={stats.present} icon={CheckCircle2} tone="blue" />
+                    <StatCard title="Late" value={stats.late} icon={Clock} tone="amber" />
+                    <StatCard title="Absent" value={stats.absent} icon={AlertCircle} tone="slate" />
                 </div>
             </div>
 
-            {/* Warning banner if below 75% */}
-            {stats.total > 0 && stats.pct < 75 && (
-                <div className="bg-red-50 border-l-4 border-red-500 rounded-[1.5rem] p-6 flex items-start gap-4 shadow-sm animate-in fade-in slide-in-from-bottom-4">
-                    <AlertCircle className="h-6 w-6 text-red-500 shrink-0 mt-0.5" />
-                    <div>
-                        <p className="font-black text-red-800 text-lg">Attendance Below 75%</p>
-                        <p className="text-sm text-red-600 font-medium mt-1 leading-relaxed">Please contact your tutor. Consistent attendance is mandatory to sit examinations.</p>
-                    </div>
-                </div>
-            )}
-
-            {/* History */}
-            <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
-                <div className="p-8 border-b border-gray-100 bg-gradient-to-r from-gray-50/50 to-transparent">
-                    <h3 className="font-black text-gray-900 text-lg flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-600">
-                            <Calendar className="h-4 w-4" />
-                        </div>
-                        Attendance History
-                    </h3>
+            <section className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100">
+                    <h3 className="font-black text-gray-900">Attendance History</h3>
                 </div>
                 {loading ? (
-                    <div className="py-24 flex justify-center"><Loader2 className="h-10 w-10 animate-spin text-emerald-500" /></div>
-                ) : records.length === 0 ? (
-                    <div className="py-24 text-center">
-                        <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                        <span className="text-gray-400 font-bold block">No attendance records found.</span>
+                    <div className="py-16 flex justify-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
                     </div>
+                ) : records.length === 0 ? (
+                    <div className="py-16 text-center text-gray-400">No attendance records found.</div>
                 ) : (
-                    <div className="divide-y divide-gray-50/80 p-4">
-                        {records.slice(0, 50).map(r => (
-                            <div key={r.id} className="flex items-center justify-between p-4 hover:bg-gray-50 rounded-2xl transition-all">
-                                <div className="flex items-center gap-5">
-                                    <div className={clsx(
-                                        "h-12 w-12 rounded-2xl flex items-center justify-center border",
-                                        r.status === "PRESENT" ? "bg-emerald-50 border-emerald-100 text-emerald-600 shadow-sm"
-                                            : r.status === "LATE" ? "bg-amber-50 border-amber-100 text-amber-600 shadow-sm"
-                                                : "bg-red-50 border-red-100 text-red-600 shadow-sm"
-                                    )}>
-                                        {r.status === "PRESENT" ? <Check className="h-5 w-5" /> : r.status === "LATE" ? <Clock className="h-5 w-5" /> : <X className="h-5 w-5" />}
-                                    </div>
-                                    <div>
-                                        <p className="font-black text-gray-900 text-base">{r.date}</p>
-                                        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mt-0.5 flex items-center gap-2">
-                                            {r.time ? <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{r.time}</span> : ""}
-                                            {r.time && <span className="opacity-50">•</span>}
-                                            <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{r.center || "—"}</span>
-                                            <span className="opacity-50">•</span>
-                                            <span className="flex items-center gap-1"><ZapIcon className="h-3 w-3" />{r.method}</span>
-                                        </p>
-                                    </div>
+                    <div className="divide-y divide-gray-100">
+                        {records.slice(0, 100).map((r) => (
+                            <div key={r.id} className="px-6 py-4 flex items-center justify-between gap-4">
+                                <div>
+                                    <p className="font-bold text-gray-900">{r.date}</p>
+                                    <p className="text-xs text-gray-500">{r.time || "-"} | {r.method}</p>
                                 </div>
                                 <StatusBadge status={r.status} />
                             </div>
                         ))}
                     </div>
                 )}
-            </div>
+            </section>
         </div>
     );
 }
 
-// ── Page Entry ────────────────────────────────────────────────────────────────
-
 export default function AttendancePage() {
-    const [role, setRole] = useState<"SUPER_ADMIN" | "STAFF" | "STUDENT">("STAFF");
-    const [userId, setUserId] = useState("");
-
-    useEffect(() => {
-        const storedRole = localStorage.getItem("userRole");
-        const storedId = localStorage.getItem("userId") || localStorage.getItem("username") || "";
-        if (storedRole) setRole(storedRole as any);
-        setUserId(storedId);
-    }, []);
+    const [role] = useState<Role>(() => {
+        if (typeof window === "undefined") return "STAFF";
+        const stored = localStorage.getItem("userRole");
+        return stored === "SUPER_ADMIN" || stored === "STAFF" || stored === "STUDENT" ? stored : "STAFF";
+    });
+    const [userId] = useState(() => {
+        if (typeof window === "undefined") return "";
+        return localStorage.getItem("userId") || "";
+    });
 
     return (
         <AdminLayout userRole={role}>
             <div className="p-2 sm:p-4">
                 {role === "STUDENT" ? (
-                    <StudentAttendanceView userId={userId} />
+                    <StudentAttendanceView />
                 ) : role === "SUPER_ADMIN" ? (
                     <AdminAttendanceView />
                 ) : (

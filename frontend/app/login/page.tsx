@@ -6,7 +6,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, User, Lock, ArrowLeft, AlertCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
-import api, { ApiResponse } from "@/lib/axios";
+import api from "@/lib/axios";
+import { getApiErrorMessage } from "@/lib/error-utils";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -14,22 +15,34 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [formData, setFormData] = useState({
-        username: "",
+        loginId: "",
         password: "",
     });
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!formData.loginId.trim()) {
+            setError("Login ID is required.");
+            return;
+        }
+        if (!formData.password) {
+            setError("Password is required.");
+            return;
+        }
+
         setLoading(true);
         setError(null);
 
         try {
-            const response: any = await api.post("/auth/login", formData);
+            const response: any = await api.post("/auth/login", {
+                loginId: formData.loginId.trim(),
+                password: formData.password,
+            });
             const data = response.data || response;
 
             localStorage.setItem("token", data.token);
             localStorage.setItem("userRole", data.role);
-            localStorage.setItem("username", data.email);
+            localStorage.setItem("username", data.username);
             localStorage.setItem("name", data.displayName);
             localStorage.setItem("userId", data.id);
 
@@ -44,7 +57,7 @@ export default function LoginPage() {
                 }
             }
         } catch (err: any) {
-            setError(err.message || t("loginErrorNetwork"));
+            setError(getApiErrorMessage(err, t("loginErrorNetwork")));
         } finally {
             setLoading(false);
         }
@@ -107,24 +120,24 @@ export default function LoginPage() {
                                 </div>
                             )}
 
-                            {/* Username */}
+                            {/* Login ID */}
                             <div>
-                                <label htmlFor="username" className="block text-sm font-bold text-gray-700 mb-2">
-                                    {t("loginUsernameLabel")}
+                                <label htmlFor="loginId" className="block text-sm font-bold text-gray-700 mb-2">
+                                    {t("loginIdLabel")}
                                 </label>
                                 <div className="relative rounded-2xl shadow-sm group">
                                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                         <User className="h-5 w-5 text-gray-400 group-focus-within:text-emerald-500 transition-colors" aria-hidden="true" />
                                     </div>
                                     <input
-                                        id="username"
-                                        name="username"
+                                        id="loginId"
+                                        name="loginId"
                                         type="text"
                                         required
                                         className="focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 block w-full pl-12 sm:text-sm border-gray-200 rounded-2xl py-4 transition-all outline-none bg-gray-50 font-medium hover:bg-white"
-                                        placeholder={t("loginUsernamePlaceholder")}
-                                        value={formData.username}
-                                        onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                                        placeholder={t("loginIdPlaceholder")}
+                                        value={formData.loginId}
+                                        onChange={(e) => setFormData({ ...formData, loginId: e.target.value })}
                                     />
                                 </div>
                             </div>
@@ -173,7 +186,7 @@ export default function LoginPage() {
                             <div className="pt-2">
                                 <button
                                     type="submit"
-                                    disabled={loading}
+                                    disabled={loading || !formData.loginId.trim() || !formData.password}
                                     className="w-full flex justify-center py-4 px-4 border border-transparent rounded-2xl shadow-lg shadow-emerald-600/20 text-sm font-black text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:-translate-y-0.5 tracking-wide"
                                 >
                                     {loading ? (

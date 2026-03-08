@@ -1,7 +1,12 @@
 package com.aharam.tuition.controller;
 
+import com.aharam.tuition.dto.ApiResponse;
+import com.aharam.tuition.dto.response.FeeLogDto;
+import com.aharam.tuition.dto.response.FeeStatusDto;
 import com.aharam.tuition.entity.Fee;
+import com.aharam.tuition.mapper.ResponseMapper;
 import com.aharam.tuition.service.FeeService;
+import com.aharam.tuition.util.ErrorMessageUtil;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -9,36 +14,32 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
-import com.aharam.tuition.dto.ApiResponse;
 
 @RestController
 @RequestMapping("/api/fees")
-@CrossOrigin(origins = "*", maxAge = 3600)
 public class FeeController {
 
     @Autowired
     private FeeService feeService;
 
-    // ── Staff Endpoints ────────────────────────────────────────────────────────
-
-    /** Barcode scan — marks fee PAID for given month/year */
     @PostMapping("/scan")
-    public ResponseEntity<ApiResponse<Fee>> scanBarcode(@RequestBody BarcodeRequest request) {
+    public ResponseEntity<ApiResponse<FeeStatusDto>> scanBarcode(@RequestBody BarcodeRequest request) {
         try {
             Fee fee = feeService.scanBarcode(
                     request.getBarcode(),
                     request.getMonth(),
                     request.getAcademicYear(),
                     request.getStaffId());
-            return ResponseEntity.ok(ApiResponse.success(fee, "Fee scanned successfully"));
+            return ResponseEntity.ok(ApiResponse.success(ResponseMapper.toFeeStatus(fee), "Fee scanned successfully"));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage(), "SCAN_FAILED"));
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(ErrorMessageUtil.safeMessage(e, "Failed to scan fee barcode."),
+                            "SCAN_FAILED"));
         }
     }
 
-    /** Manual mark — update any student fee status */
     @PostMapping("/manual")
-    public ResponseEntity<ApiResponse<Fee>> markManual(@RequestBody ManualRequest request) {
+    public ResponseEntity<ApiResponse<FeeStatusDto>> markManual(@RequestBody ManualRequest request) {
         try {
             Fee.FeeStatus status = Fee.FeeStatus.valueOf(request.getStatus().toUpperCase());
             Fee fee = feeService.markManual(
@@ -47,45 +48,56 @@ public class FeeController {
                     request.getAcademicYear(),
                     status,
                     request.getStaffId());
-            return ResponseEntity.ok(ApiResponse.success(fee, "Fee marked manually"));
+            return ResponseEntity.ok(ApiResponse.success(ResponseMapper.toFeeStatus(fee), "Fee marked manually"));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
                     .body(ApiResponse.error("Invalid status: " + request.getStatus(), "INVALID_STATUS"));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage(), "MARK_FAILED"));
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(ErrorMessageUtil.safeMessage(e, "Failed to update fee status."),
+                            "MARK_FAILED"));
         }
     }
 
-    /** Batch monitoring — get all fees for a batch/month/year */
     @GetMapping("/batch/{batch}")
-    public ResponseEntity<ApiResponse<List<Fee>>> getBatchFees(
+    public ResponseEntity<ApiResponse<List<FeeStatusDto>>> getBatchFees(
             @PathVariable Integer batch,
             @RequestParam(required = false) String month,
             @RequestParam String academicYear) {
+        List<Fee> data;
+        String message;
         if (month != null && !month.isBlank()) {
-            return ResponseEntity.ok(ApiResponse.success(feeService.getBatchFeesByMonthYear(batch, month, academicYear),
-                    "Fetched batch monthly fees"));
+            data = feeService.getBatchFeesByMonthYear(batch, month, academicYear);
+            message = "Fetched batch monthly fees";
+        } else {
+            data = feeService.getAllBatchFees(batch, academicYear);
+            message = "Fetched batch yearly fees";
         }
-        return ResponseEntity
-                .ok(ApiResponse.success(feeService.getAllBatchFees(batch, academicYear), "Fetched batch yearly fees"));
+        List<FeeStatusDto> records = data.stream().map(ResponseMapper::toFeeStatus).toList();
+        return ResponseEntity.ok(ApiResponse.success(records, message));
     }
 
-    /** Student self-view */
     @GetMapping("/student/{studentId}")
-    public ResponseEntity<ApiResponse<List<Fee>>> getStudentFees(@PathVariable String studentId) {
-        return ResponseEntity
-                .ok(ApiResponse.success(feeService.getStudentFees(studentId), "Fetched student fee history"));
+    public ResponseEntity<ApiResponse<List<FeeStatusDto>>> getStudentFees(@PathVariable String studentId) {
+        List<FeeStatusDto> records = feeService.getStudentFees(studentId).stream()
+                .map(ResponseMapper::toFeeStatus)
+                .peek(dto -> {
+                    if (dto.getStudentId() == null || dto.getStudentId().isBlank()) {
+                        dto.setStudentId(studentId);
+                    }
+                })
+                .toList();
+        return ResponseEntity.ok(ApiResponse.success(records, "Fetched student fee history"));
     }
 
-    /** Audit log for a specific fee record */
     @GetMapping("/{feeId}/logs")
-    public ResponseEntity<ApiResponse<?>> getAuditLog(@PathVariable Long feeId) {
-        return ResponseEntity.ok(ApiResponse.success(feeService.getFeeAuditLog(feeId), "Fetched fee audit logs"));
+    public ResponseEntity<ApiResponse<List<FeeLogDto>>> getAuditLog(@PathVariable Long feeId) {
+        List<FeeLogDto> logs = feeService.getFeeAuditLog(feeId).stream()
+                .map(ResponseMapper::toFeeLog)
+                .toList();
+        return ResponseEntity.ok(ApiResponse.success(logs, "Fetched fee audit logs"));
     }
 
-    // ── Admin Endpoints ────────────────────────────────────────────────────────
-
-    /** Admin analytics summary */
     @GetMapping("/admin/summary")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getAdminSummary(@RequestParam String academicYear) {
         return ResponseEntity
@@ -93,12 +105,12 @@ public class FeeController {
     }
 
     @GetMapping("/admin/all")
-    public ResponseEntity<ApiResponse<List<Fee>>> getAllByYear(@RequestParam String academicYear) {
-        return ResponseEntity
-                .ok(ApiResponse.success(feeService.getAllByYear(academicYear), "Fetched all fees for year"));
+    public ResponseEntity<ApiResponse<List<FeeStatusDto>>> getAllByYear(@RequestParam String academicYear) {
+        List<FeeStatusDto> records = feeService.getAllByYear(academicYear).stream()
+                .map(ResponseMapper::toFeeStatus)
+                .toList();
+        return ResponseEntity.ok(ApiResponse.success(records, "Fetched all fees for year"));
     }
-
-    // ── DTOs ──────────────────────────────────────────────────────────────────
 
     @Data
     static class BarcodeRequest {
@@ -113,7 +125,7 @@ public class FeeController {
         private String studentId;
         private String month;
         private String academicYear;
-        private String status; // "PAID" or "PENDING"
+        private String status;
         private Long staffId;
     }
 }

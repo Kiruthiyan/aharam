@@ -5,6 +5,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Loader2, AlertCircle, Lock } from "lucide-react";
 import api from "@/lib/axios";
+import { getApiErrorMessage } from "@/lib/error-utils";
+import { isStrongPassword } from "@/lib/validation";
 
 export default function ChangePasswordPage() {
     const router = useRouter();
@@ -32,8 +34,16 @@ export default function ChangePasswordPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        if (!formData.oldPassword) {
+            setError("Current password is required.");
+            return;
+        }
         if (formData.newPassword !== formData.confirmPassword) {
             setError("New passwords do not match");
+            return;
+        }
+        if (!isStrongPassword(formData.newPassword)) {
+            setError("Password must be at least 8 characters and include upper, lower, number, and special character.");
             return;
         }
 
@@ -41,11 +51,10 @@ export default function ChangePasswordPage() {
         setError(null);
 
         const username = localStorage.getItem("username");
-        const token = localStorage.getItem("token");
 
         try {
             await api.post("/auth/change-password", {
-                username: username,
+                username: username?.trim(),
                 oldPassword: formData.oldPassword,
                 newPassword: formData.newPassword
             });
@@ -61,7 +70,7 @@ export default function ChangePasswordPage() {
                 }
             }, 2000);
         } catch (err: any) {
-            setError(err.message || "Failed to change password. Please check your current password.");
+            setError(getApiErrorMessage(err, "Failed to change password. Please check your current password."));
         } finally {
             setLoading(false);
         }
@@ -119,7 +128,7 @@ export default function ChangePasswordPage() {
                             <input
                                 type="password"
                                 required
-                                minLength={6}
+                                minLength={8}
                                 value={formData.newPassword}
                                 onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
                                 className="w-full bg-gray-50 border border-gray-200 px-4 py-3 rounded-2xl text-sm font-medium outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all hover:bg-white"
@@ -130,7 +139,7 @@ export default function ChangePasswordPage() {
                             <input
                                 type="password"
                                 required
-                                minLength={6}
+                                minLength={8}
                                 value={formData.confirmPassword}
                                 onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                                 className="w-full bg-gray-50 border border-gray-200 px-4 py-3 rounded-2xl text-sm font-medium outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all hover:bg-white"
@@ -141,7 +150,7 @@ export default function ChangePasswordPage() {
                     <div className="pt-4">
                         <button
                             type="submit"
-                            disabled={loading}
+                            disabled={loading || !formData.oldPassword || !formData.newPassword || formData.newPassword !== formData.confirmPassword || !isStrongPassword(formData.newPassword)}
                             className="w-full flex justify-center py-4 px-4 border border-transparent rounded-2xl shadow-lg shadow-emerald-600/20 text-sm font-black text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:-translate-y-0.5 tracking-wide"
                         >
                             {loading ? <Loader2 className="animate-spin h-5 w-5" /> : "Change Password"}

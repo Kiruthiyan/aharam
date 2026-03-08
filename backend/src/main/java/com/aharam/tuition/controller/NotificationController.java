@@ -1,6 +1,9 @@
 package com.aharam.tuition.controller;
 
+import com.aharam.tuition.dto.ApiResponse;
+import com.aharam.tuition.dto.response.NoticeResponseDto;
 import com.aharam.tuition.entity.Notice;
+import com.aharam.tuition.mapper.ResponseMapper;
 import com.aharam.tuition.repository.NoticeRepository;
 import com.aharam.tuition.service.NotificationService;
 import lombok.Data;
@@ -15,7 +18,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/notifications")
-@CrossOrigin(origins = "*", maxAge = 3600)
 public class NotificationController {
 
     @Autowired
@@ -24,29 +26,23 @@ public class NotificationController {
     @Autowired
     private NoticeRepository noticeRepository;
 
-    /**
-     * Mobile app calls this on startup to register the device push token.
-     */
     @PostMapping("/token")
-    public ResponseEntity<?> registerToken(@RequestBody TokenRequest request) {
+    public ResponseEntity<ApiResponse<String>> registerToken(@RequestBody TokenRequest request) {
         notificationService.saveToken(request.getUserId(), request.getToken());
-        return ResponseEntity.ok("Token registered.");
+        return ResponseEntity.ok(ApiResponse.success(null, "Token registered."));
     }
 
-    /**
-     * Fetch all notification broadcasts (History Tab).
-     */
     @GetMapping
-    public ResponseEntity<List<Notice>> getNotifications() {
-        return ResponseEntity.ok(noticeRepository.findAllByOrderByCreatedAtDesc());
+    public ResponseEntity<ApiResponse<List<NoticeResponseDto>>> getNotifications() {
+        List<NoticeResponseDto> notices = noticeRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(ResponseMapper::toNotice)
+                .toList();
+        return ResponseEntity.ok(ApiResponse.success(notices, "Fetched notifications."));
     }
 
-    /**
-     * Compose and send a new broadcast notification.
-     * Saves to DB and optionally triggers actual push/WhatsApp logic underneath.
-     */
     @PostMapping("/send")
-    public ResponseEntity<?> sendNotification(@RequestBody NoticeRequest req, Authentication authentication) {
+    public ResponseEntity<ApiResponse<NoticeResponseDto>> sendNotification(@RequestBody NoticeRequest req,
+            Authentication authentication) {
         String senderName = authentication != null ? authentication.getName() : "System";
         String senderRole = authentication != null
                 ? authentication.getAuthorities().iterator().next().getAuthority()
@@ -62,22 +58,14 @@ public class NotificationController {
 
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
         notice.setAt(LocalDateTime.now().format(formatter));
-        notice.setStatus("SENT"); // PENDING if we queue it, SENT for now
+        notice.setStatus("SENT");
 
-        // If channel is WHATSAPP or BOTH, we would trigger WhatsApp API here
         if ("WHATSAPP".equals(req.getChannel()) || "BOTH".equals(req.getChannel())) {
-            // Placeholder: simulate WhatsApp dispatch to 0 users for now until Twilio is
-            // connected
             notice.setWhatsappCount(0);
         }
 
-        noticeRepository.save(notice);
-
-        // TODO: Call NotificationService to actually push the notification to the
-        // mobile app
-        // notificationService.broadcast(notice);
-
-        return ResponseEntity.ok(notice);
+        Notice saved = noticeRepository.save(notice);
+        return ResponseEntity.ok(ApiResponse.success(ResponseMapper.toNotice(saved), "Notification sent."));
     }
 
     @Data

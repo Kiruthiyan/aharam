@@ -1,8 +1,8 @@
 package com.aharam.tuition.controller;
 
+import com.aharam.tuition.dto.ApiResponse;
 import com.aharam.tuition.entity.Role;
 import com.aharam.tuition.entity.User;
-import com.aharam.tuition.entity.Student;
 import com.aharam.tuition.repository.StudentRepository;
 import com.aharam.tuition.repository.UserRepository;
 import com.aharam.tuition.repository.AttendanceRepository;
@@ -20,12 +20,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Map;
+import java.util.HashSet;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Set;
+import java.util.Map;
 
-@CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/dashboard")
 public class DashboardController {
@@ -46,7 +47,7 @@ public class DashboardController {
     NotificationLogRepository notificationLogRepository;
 
     @GetMapping("/stats")
-    public ResponseEntity<?> getStats() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getStats() {
         boolean isSuperAdmin = false;
         boolean isStaff = false;
         User currentUser = null;
@@ -64,27 +65,33 @@ public class DashboardController {
         stats.put("totalStudents", totalStudents);
 
         LocalDate today = LocalDate.now();
+        String currentAcademicYear = String.valueOf(today.getYear());
+        long paidForYear = feeRepository.countByAcademicYearAndStatusAndDeletedAtIsNull(
+                currentAcademicYear, Fee.FeeStatus.PAID);
+        long pendingForYear = feeRepository.countByAcademicYearAndStatusAndDeletedAtIsNull(
+                currentAcademicYear, Fee.FeeStatus.PENDING);
+        long feesPaidCount = paidForYear;
+        long feesPendingCount = pendingForYear;
+        if (feesPaidCount + feesPendingCount == 0) {
+            feesPaidCount = feeRepository.countByStatusAndDeletedAtIsNull(Fee.FeeStatus.PAID);
+            feesPendingCount = feeRepository.countByStatusAndDeletedAtIsNull(Fee.FeeStatus.PENDING);
+        }
 
         if (isSuperAdmin) {
-            long totalStaff = userRepository.findAll().stream().filter(u -> u.getRole() == Role.STAFF).count();
+            long totalStaff = userRepository.countByRoleAndActiveTrue(Role.STAFF);
             stats.put("totalStaff", totalStaff);
 
-            // Basic Aggregates
-            List<Student> allStudents = studentRepository.findAll();
-            // Since gender is not on Student entity, we omit the breakdown for now
-            long totalBoys = 0;
-            long totalGirls = 0;
-
-            stats.put("totalBatches", 5); // Assuming static batches for now
+            stats.put("totalBatches", studentRepository.countDistinctBatches());
+            stats.put("totalCenters", studentRepository.countDistinctCenters());
+            long totalBoys = studentRepository.countMaleStudents();
+            long totalGirls = studentRepository.countFemaleStudents();
             stats.put("totalBoys", totalBoys);
             stats.put("totalGirls", totalGirls);
 
-            // Attendance
-            List<Attendance> todaysAttendance = attendanceRepository.findByDate(today);
-            long presentToday = todaysAttendance.stream().filter(a -> "PRESENT".equalsIgnoreCase(a.getStatus().name())
-                    || "LATE".equalsIgnoreCase(a.getStatus().name())).count();
-            long absentToday = todaysAttendance.stream().filter(a -> "ABSENT".equalsIgnoreCase(a.getStatus().name()))
-                    .count();
+            long presentToday = attendanceRepository.countByDateAndStatusIn(
+                    today,
+                    List.of(Attendance.AttendanceStatus.PRESENT, Attendance.AttendanceStatus.LATE));
+            long absentToday = attendanceRepository.countByDateAndStatus(today, Attendance.AttendanceStatus.ABSENT);
 
             stats.put("todayPresent", presentToday);
             stats.put("todayAbsent", absentToday);
@@ -92,44 +99,62 @@ public class DashboardController {
             double overallAttendancePct = totalStudents > 0 ? ((double) presentToday / totalStudents) * 100 : 0;
             stats.put("overallAttendancePct", Math.round(overallAttendancePct));
 
-            // Fees
-            stats.put("feesPaidCount", 0); // Need broader logic for fees, temporary 0
-            stats.put("feesPendingCount", 0);
+            stats.put("feesPaidCount", feesPaidCount);
+            stats.put("feesPendingCount", feesPendingCount);
 
-            // Recent Notification Logs
-            List<Map<String, String>> logs = new java.util.ArrayList<>();
-            List<NotificationLog> recentNotifs = notificationLogRepository.findAll().stream()
-                    .sorted((n1, n2) -> n2.getCreatedAt().compareTo(n1.getCreatedAt()))
-                    .limit(5)
-                    .collect(Collectors.toList());
+            List<Map<String, String>> logs = new ArrayList<>();
+            List<NotificationLog> recentNotifs = notificationLogRepository.findTop5ByOrderByTriggeredAtDesc();
 
             for (NotificationLog log : recentNotifs) {
                 Map<String, String> logMap = new HashMap<>();
-                logMap.put("action", "Announcement Broadcast");
-                // The NotificationLog entity doesn't have sentBy, sentByRole, or audience
-                // fields
-                // So using simple static texts here as placeholders for missing data
-                logMap.put("actor", "System/Admin");
-                logMap.put("role", "ADMIN");
-                logMap.put("details", "Channel: " + log.getChannel() + ", Target: " + log.getUserId());
-                logMap.put("at", log.getCreatedAt().format(DateTimeFormatter.ofPattern("hh:mm a")));
+                String actorName = log.getTriggeredBy() != null ? log.getTriggeredBy().getFullName() : "System";
+                String actorRole = log.getTriggeredBy() != null && log.getTriggeredBy().getRole() != null
+                        ? log.getTriggeredBy().getRole().name()
+                        : "SYSTEM";
+                logMap.put("action", (log.getModule() == null ? "Notification" : log.getModule()) + " update");
+                logMap.put("actor", actorName);
+                logMap.put("role", actorRole);
+                logMap.put("details",
+                        "Channel: " + (log.getChannel() == null ? "-" : log.getChannel()) +
+                                ", Target: " + (log.getTargetNumber() == null ? "-" : log.getTargetNumber()) +
+                                ", Status: " + (log.getStatus() == null ? "-" : log.getStatus()));
+                logMap.put("at", log.getTriggeredAt() == null ? ""
+                        : log.getTriggeredAt().format(DateTimeFormatter.ofPattern("hh:mm a")));
                 logs.add(logMap);
             }
             stats.put("recentLogs", logs);
 
         } else if (isStaff && currentUser != null) {
-            // Staff specific logic
-            // Assuming no assigned staff direct mapping logic for now to fix compile error
-            long assignedCount = 0;
+            final User userCtx = currentUser;
+            Set<String> assignedStudentIds = new HashSet<>(studentRepository.findStudentIdsByCreator(userCtx.getId()));
+
+            // Removed fallback logic: staff should only see students they've explicitly assigned
+            // if (assignedStudentIds.isEmpty()) {
+            //     assignedStudentIds.addAll(studentRepository.findAllStudentIds());
+            // }
+            
+            final Set<String> finalAssignedStudentIds = assignedStudentIds;
+            long assignedCount = assignedStudentIds.size();
             stats.put("assignedStudents", assignedCount);
 
-            long staffPresentToday = 0;
-
+            long staffPresentToday = attendanceRepository.countDistinctStudentsMarkedByStaffOnDate(today, userCtx.getId());
             stats.put("todaysAttendance", staffPresentToday);
             stats.put("todayPresent", staffPresentToday);
-            stats.put("pendingFees", 0);
+
+            long pendingFees = finalAssignedStudentIds.isEmpty()
+                    ? 0L
+                    : feeRepository.countByAcademicYearAndStatusAndStudentIds(
+                            currentAcademicYear,
+                            Fee.FeeStatus.PENDING,
+                            finalAssignedStudentIds.stream().toList());
+            if (pendingFees == 0 && !finalAssignedStudentIds.isEmpty()) {
+                pendingFees = feeRepository.countByStatusAndStudentIds(
+                        Fee.FeeStatus.PENDING,
+                        finalAssignedStudentIds.stream().toList());
+            }
+            stats.put("pendingFees", pendingFees);
         }
 
-        return ResponseEntity.ok(stats);
+        return ResponseEntity.ok(ApiResponse.success(stats, "Fetched dashboard stats"));
     }
 }

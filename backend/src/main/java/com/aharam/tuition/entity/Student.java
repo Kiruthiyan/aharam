@@ -7,10 +7,12 @@ import lombok.AllArgsConstructor;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
 
 @Entity
 @Table(name = "students")
+@SQLDelete(sql = "UPDATE students SET deleted_at = CURRENT_TIMESTAMP WHERE student_id=?")
 @SQLRestriction("deleted_at IS NULL")
 @Data
 @NoArgsConstructor
@@ -56,6 +58,9 @@ public class Student {
 
     @Column(nullable = false)
     private Integer examBatch;
+
+    @Column(nullable = false, columnDefinition = "varchar(16) default 'UNSPECIFIED'")
+    private String gender = "UNSPECIFIED";
 
     private String subjects; // Comma separated
 

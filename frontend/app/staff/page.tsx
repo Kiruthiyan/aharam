@@ -2,10 +2,12 @@
 
 import AdminLayout from "@/components/AdminLayout";
 import { useState, useEffect } from "react";
-import { UserPlus, Trash2, Shield, Loader2, AlertCircle, Phone, Mail, CheckCircle, Search, AlertTriangle, X } from "lucide-react";
+import { UserPlus, Trash2, Shield, Loader2, AlertCircle, Mail, CheckCircle, AlertTriangle, X } from "lucide-react";
 import clsx from "clsx";
 import { useToast } from "@/components/Toast";
 import api from "@/lib/axios";
+import { getApiErrorMessage } from "@/lib/error-utils";
+import { isSixDigitOtp, isValidEmail } from "@/lib/validation";
 
 interface Staff {
     id: number;
@@ -15,11 +17,17 @@ interface Staff {
     active: boolean;
 }
 
+const unwrapData = <T,>(payload: unknown): T => {
+    if (payload && typeof payload === "object" && "data" in payload) {
+        return (payload as { data: T }).data;
+    }
+    return payload as T;
+};
+
 export default function StaffPage() {
     const { toast } = useToast();
     const [staffList, setStaffList] = useState<Staff[]>([]);
     const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState("");
     const [showModal, setShowModal] = useState(false);
 
     // Form State
@@ -34,6 +42,8 @@ export default function StaffPage() {
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<Staff | null>(null);
     const [deleteLoading, setDeleteLoading] = useState(false);
+    const trimmedEmail = formData.email.trim();
+    const trimmedName = formData.name.trim();
 
     useEffect(() => {
         fetchStaff();
@@ -41,8 +51,8 @@ export default function StaffPage() {
 
     const fetchStaff = async () => {
         try {
-            const data: any = await api.get("/admin/staff");
-            setStaffList(data.data || data);
+            const data = await api.get("/admin/staff");
+            setStaffList(unwrapData<Staff[]>(data));
         } catch (err) {
             console.error("Failed to fetch staff", err);
         } finally {
@@ -52,16 +62,21 @@ export default function StaffPage() {
 
     const handleSendCode = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!isValidEmail(trimmedEmail)) {
+            setError("Please enter a valid email address.");
+            return;
+        }
+
         setSubmitLoading(true);
         setError(null);
         setSuccessMsg(null);
 
         try {
-            await api.post("/admin/staff/send-verification-code", { email: formData.email });
+            await api.post("/admin/staff/send-verification-code", { email: trimmedEmail });
             setSuccessMsg("Verification code sent to your email!");
             setStep(2);
-        } catch (err: any) {
-            setError(err.message || "Failed to send code");
+        } catch (err: unknown) {
+            setError(getApiErrorMessage(err, "Failed to send code"));
         } finally {
             setSubmitLoading(false);
         }
@@ -69,16 +84,21 @@ export default function StaffPage() {
 
     const handleVerifyCode = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!isSixDigitOtp(formData.otp)) {
+            setError("OTP must be a 6-digit number.");
+            return;
+        }
+
         setSubmitLoading(true);
         setError(null);
         setSuccessMsg(null);
 
         try {
-            await api.post("/admin/staff/verify-email-code", { email: formData.email, otp: formData.otp });
+            await api.post("/admin/staff/verify-email-code", { email: trimmedEmail, otp: formData.otp.trim() });
             setSuccessMsg("Email verified successfully!");
             setStep(3);
-        } catch (err: any) {
-            setError(err.message || "Invalid verification code");
+        } catch (err: unknown) {
+            setError(getApiErrorMessage(err, "Invalid verification code"));
         } finally {
             setSubmitLoading(false);
         }
@@ -86,22 +106,28 @@ export default function StaffPage() {
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!trimmedName || trimmedName.length < 3) {
+            setError("Name must be at least 3 characters.");
+            return;
+        }
+
         setSubmitLoading(true);
         setError(null);
 
         try {
-            const res: any = await api.post("/admin/staff/register", {
-                username: formData.name,
-                email: formData.email,
+            const res = await api.post("/admin/staff/register", {
+                username: trimmedName,
+                email: trimmedEmail,
                 role: "staff"
             });
-            toast("success", res.message || "Staff Admin registered successfully!");
+            const payload = res as { message?: string };
+            toast("success", payload.message || "Staff Admin registered successfully!");
             setShowModal(false);
             setStep(1);
             setFormData({ email: "", otp: "", name: "" });
             fetchStaff();
-        } catch (err: any) {
-            setError(err.message || "Registration failed");
+        } catch (err: unknown) {
+            setError(getApiErrorMessage(err, "Registration failed"));
         } finally {
             setSubmitLoading(false);
         }
@@ -116,10 +142,10 @@ export default function StaffPage() {
         setDeleteLoading(true);
         try {
             await api.delete(`/admin/staff/${deleteTarget.id}`);
-            toast("success", `${deleteTarget.fullName || deleteTarget.email}'s account archived successfully.`);
+            toast("success", `${deleteTarget.fullName || deleteTarget.email}'s account removed successfully.`);
             fetchStaff();
-        } catch (err) {
-            toast("error", "Failed to archive staff account.");
+        } catch {
+            toast("error", "Failed to remove staff account.");
         } finally {
             setDeleteLoading(false);
             setDeleteTarget(null);
@@ -202,7 +228,9 @@ export default function StaffPage() {
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100">
                         <div className="p-6 border-b border-gray-100 bg-emerald-900 text-white flex justify-between items-center">
                             <h2 className="text-lg font-bold">Add New Staff Member</h2>
-                            <button onClick={resetModal} className="text-emerald-200 hover:text-white transition-colors">✕</button>
+                            <button onClick={resetModal} className="text-emerald-200 hover:text-white transition-colors" aria-label="Close">
+                                <X className="h-5 w-5" />
+                            </button>
                         </div>
 
                         <div className="px-6 pt-6 pb-2">
@@ -247,7 +275,7 @@ export default function StaffPage() {
                                     </div>
                                     <div className="pt-2 flex gap-3">
                                         <button type="button" onClick={resetModal} className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-medium transition-colors">Cancel</button>
-                                        <button type="submit" disabled={submitLoading || !formData.email} className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 flex items-center justify-center font-bold shadow-lg shadow-emerald-200 transition-all hover:translate-y-[-1px] disabled:opacity-50 disabled:hover:translate-y-0">
+                                        <button type="submit" disabled={submitLoading || !isValidEmail(trimmedEmail)} className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 flex items-center justify-center font-bold shadow-lg shadow-emerald-200 transition-all hover:translate-y-[-1px] disabled:opacity-50 disabled:hover:translate-y-0">
                                             {submitLoading ? <Loader2 className="animate-spin h-5 w-5" /> : "Send Code"}
                                         </button>
                                     </div>
@@ -266,7 +294,7 @@ export default function StaffPage() {
                                             type="text"
                                             maxLength={6}
                                             value={formData.otp}
-                                            onChange={(e) => setFormData({ ...formData, otp: e.target.value })}
+                                            onChange={(e) => setFormData({ ...formData, otp: e.target.value.replace(/\D/g, "") })}
                                             className="w-full px-4 py-2.5 text-center tracking-[0.5em] font-mono text-xl border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                                             placeholder="------"
                                             required
@@ -274,7 +302,7 @@ export default function StaffPage() {
                                     </div>
                                     <div className="pt-2 flex gap-3">
                                         <button type="button" onClick={() => { setStep(1); setError(null); setSuccessMsg(null); }} className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-medium transition-colors">Back</button>
-                                        <button type="submit" disabled={submitLoading || formData.otp.length !== 6} className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 flex items-center justify-center font-bold shadow-lg shadow-emerald-200 transition-all hover:translate-y-[-1px] disabled:opacity-50 disabled:hover:translate-y-0">
+                                        <button type="submit" disabled={submitLoading || !isSixDigitOtp(formData.otp)} className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 flex items-center justify-center font-bold shadow-lg shadow-emerald-200 transition-all hover:translate-y-[-1px] disabled:opacity-50 disabled:hover:translate-y-0">
                                             {submitLoading ? <Loader2 className="animate-spin h-5 w-5" /> : "Verify Code"}
                                         </button>
                                     </div>
@@ -302,7 +330,7 @@ export default function StaffPage() {
                                     </div>
                                     <div className="pt-2 flex gap-3">
                                         <button type="button" onClick={resetModal} className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-medium transition-colors">Cancel</button>
-                                        <button type="submit" disabled={submitLoading || !formData.name} className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 flex items-center justify-center font-bold shadow-lg shadow-emerald-200 transition-all hover:translate-y-[-1px] disabled:opacity-50 disabled:hover:translate-y-0">
+                                        <button type="submit" disabled={submitLoading || trimmedName.length < 3} className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 flex items-center justify-center font-bold shadow-lg shadow-emerald-200 transition-all hover:translate-y-[-1px] disabled:opacity-50 disabled:hover:translate-y-0">
                                             {submitLoading ? <Loader2 className="animate-spin h-5 w-5" /> : "Create Account"}
                                         </button>
                                     </div>
@@ -322,16 +350,15 @@ export default function StaffPage() {
                             <div className="h-14 w-14 rounded-full bg-red-100 border-2 border-red-200 flex items-center justify-center mb-3">
                                 <AlertTriangle className="h-7 w-7 text-red-600" />
                             </div>
-                            <h3 className="text-lg font-black text-gray-900">Archive Staff Account?</h3>
+                            <h3 className="text-lg font-black text-gray-900">Remove Staff Account?</h3>
                             <p className="text-sm text-gray-600 font-medium mt-1">
                                 <strong>{deleteTarget.fullName || deleteTarget.email}</strong> will be removed from active duty.
                             </p>
                         </div>
                         <div className="p-6 space-y-4">
                             <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-xs text-amber-800 font-medium">
-                                ⚠ This account will be <strong>archived</strong>, not permanently deleted.
-                                All associated records (attendance marks, fee actions) are preserved in history.
-                                Data can be restored from <a href="/data-history" className="underline font-bold">Data &amp; History</a>.
+                                This action removes the staff login from active use.
+                                Confirm only if this account should no longer access the system.
                             </div>
                             <div className="flex gap-3">
                                 <button onClick={() => setDeleteTarget(null)}
@@ -341,7 +368,7 @@ export default function StaffPage() {
                                 <button onClick={confirmRemove} disabled={deleteLoading}
                                     className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black text-sm transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
                                     {deleteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                                    Yes, Archive
+                                    Yes, Remove
                                 </button>
                             </div>
                         </div>

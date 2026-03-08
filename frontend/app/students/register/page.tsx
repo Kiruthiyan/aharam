@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import api from "@/lib/axios";
+import { getApiErrorMessage } from "@/lib/error-utils";
+import { isValidEmail, isValidPhone } from "@/lib/validation";
 
 // ── Subject Data ───────────────────────────────────────────────────────────────
 
@@ -66,6 +68,7 @@ export default function StudentRegistration() {
         motherOccupation: "",
         guardianName: "",
         schoolName: "",
+        gender: "",
         center: "KOKUVIL",
         medium: "TAMIL",
         examBatch: "2026",
@@ -111,9 +114,23 @@ export default function StudentRegistration() {
 
     const currentSubjects = SUBJECTS[formData.gradeLevel]?.[formData.medium] || { core: [] };
 
+    const validateRegistration = (): string | null => {
+        if (!formData.fullName.trim()) return "Student full name is required.";
+        if (!formData.fatherName.trim()) return "Father name is required.";
+        if (!formData.motherName.trim()) return "Mother name is required.";
+        if (!formData.gender) return "Gender is required.";
+        if (!formData.parentPhoneNumber.trim()) return "Parent phone number is required.";
+        if (!isValidPhone(formData.parentPhoneNumber)) return "Phone number must contain 10 to 15 digits.";
+        if (formData.email.trim() && !isValidEmail(formData.email)) return "Please enter a valid email address.";
+        return null;
+    };
+
+    const canSubmit = validateRegistration() === null;
+
     const handleSubmit = async (redirect: boolean = true) => {
-        if (!formData.fullName || !formData.fatherName || !formData.motherName || !formData.parentPhoneNumber) {
-            setError("Please fill in all required fields (marked with *).");
+        const validationError = validateRegistration();
+        if (validationError) {
+            setError(validationError);
             setStep(2);
             return;
         }
@@ -134,7 +151,7 @@ export default function StudentRegistration() {
                     ...prev,
                     studentId: "", fullName: "", fatherName: "", fatherOccupation: "",
                     motherName: "", motherOccupation: "", guardianName: "", schoolName: "",
-                    subjects: [], address: "", email: "", parentPhoneNumber: ""
+                    subjects: [], address: "", email: "", parentPhoneNumber: "", gender: ""
                 }));
                 setStep(1);
                 setTimeout(() => setSuccess(null), 6000);
@@ -142,7 +159,11 @@ export default function StudentRegistration() {
                 setTimeout(() => router.push("/students"), 4000);
             }
         } catch (err: any) {
-            setError(err.message || "Failed to register student.");
+            if (err?.errorCode === "DUPLICATE_STUDENT") {
+                setError("Student already exists for this center and batch (same name + parent phone).");
+            } else {
+                setError(getApiErrorMessage(err, "Failed to register student."));
+            }
         } finally {
             setLoading(false);
         }
@@ -309,6 +330,14 @@ export default function StudentRegistration() {
                                             Default password will be: <strong className="text-emerald-700">{formData.fullName.toLowerCase()}</strong>
                                         </p>
                                     )}
+                                </div>
+                                <div>
+                                    <label className={labelCls}>Gender <span className="text-red-500">*</span></label>
+                                    <select name="gender" value={formData.gender} onChange={handleChange} required className={inputCls}>
+                                        <option value="">Select gender</option>
+                                        <option value="MALE">Male</option>
+                                        <option value="FEMALE">Female</option>
+                                    </select>
                                 </div>
                                 <div>
                                     <label className={labelCls}><Mail className="h-3 w-3 inline mr-1" />Student Email</label>
@@ -512,11 +541,11 @@ export default function StudentRegistration() {
                         </button>
                     ) : (
                         <div className="flex gap-2">
-                            <button type="button" onClick={() => handleSubmit(false)} disabled={loading}
+                            <button type="button" onClick={() => handleSubmit(false)} disabled={loading || !canSubmit}
                                 className="px-4 py-3 rounded-xl border-2 border-emerald-200 text-emerald-700 text-sm font-black hover:bg-emerald-50 transition-all disabled:opacity-50">
                                 <Plus className="h-4 w-4 inline mr-1" />Next
                             </button>
-                            <button type="button" onClick={() => handleSubmit(true)} disabled={loading}
+                            <button type="button" onClick={() => handleSubmit(true)} disabled={loading || !canSubmit}
                                 className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-black transition-all shadow-lg shadow-emerald-900/10 disabled:opacity-50 flex items-center gap-2">
                                 {loading ? <Loader2 className="animate-spin h-4 w-4" /> : <Save className="h-4 w-4" />}
                                 Register

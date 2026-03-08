@@ -10,8 +10,10 @@ export default function Navbar() {
     const { lang, setLang, t } = useI18n();
     const [scrolled, setScrolled] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
+        setMounted(true);
         const onScroll = () => setScrolled(window.scrollY > 20);
         window.addEventListener("scroll", onScroll);
         return () => window.removeEventListener("scroll", onScroll);
@@ -37,16 +39,16 @@ export default function Navbar() {
                         <div className="relative w-11 h-11 rounded-full overflow-hidden border-2 border-emerald-400/60 shadow-md bg-white">
                             <Image src="/images/college-logo-4k.png" alt="Aharam Logo" fill className="object-contain" />
                         </div>
-                        <div className="leading-tight">
+                        <div className="leading-tight" suppressHydrationWarning>
                             <p className={`text-lg font-extrabold tracking-tight transition-colors ${
                                 scrolled ? "text-emerald-900" : "text-white"
                             }`}>
-                                {lang === "en" ? "Aharam" : "அகரம்"}
+                                {mounted ? (lang === "en" ? "Aharam" : "அகரம்") : "Aharam"}
                             </p>
                             <p className={`text-[10px] font-semibold uppercase tracking-widest transition-colors ${
                                 scrolled ? "text-emerald-600" : "text-emerald-300"
                             }`}>
-                                {lang === "en" ? "High Standard College" : "உயர் நிலைக் கல்லூரி"}
+                                {mounted ? (lang === "en" ? "High Standard College" : "உயர் நிலைக் கல்லூரி") : "High Standard College"}
                             </p>
                         </div>
                     </Link>

@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: tuition-management
+  config:
+    import: optional:file:.env[.properties]
+  profiles:
+    default: dev
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: false
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+
+app:
+  jwtExpirationMs: ${APP_JWT_EXPIRATION_MS:86400000}
+  seed:
+    default-admin:
+      enabled: false
+      name: Super Admin
+      email: admin
+      password: ""
+    default-staff:
+      enabled: false
+      name: Staff User
+      email: staff
+      password: ""
+
+notification:
+  provider: ${NOTIFICATION_PROVIDER:provider}

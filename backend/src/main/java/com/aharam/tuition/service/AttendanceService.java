@@ -2,6 +2,7 @@ package com.aharam.tuition.service;
 
 import com.aharam.tuition.entity.Attendance;
 import com.aharam.tuition.entity.Student;
+import com.aharam.tuition.entity.StudentStatus;
 import com.aharam.tuition.entity.User;
 import com.aharam.tuition.repository.AttendanceRepository;
 import com.aharam.tuition.repository.StudentRepository;
@@ -11,7 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -35,15 +35,22 @@ public class AttendanceService {
             Long staffId) {
         Student student = studentRepository.findById(studentId)
                 .orElseThrow(() -> new RuntimeException("Student not found"));
+        if (student.getStatus() != StudentStatus.ACTIVE) {
+            throw new IllegalArgumentException("Student is not active.");
+        }
+        if (student.getUser() != null && !student.getUser().isActive()) {
+            throw new IllegalArgumentException("Student account is inactive.");
+        }
 
         User staff = userRepository.findById(staffId).orElse(null);
 
-        Attendance attendance = attendanceRepository.findByStudent_StudentIdAndDate(studentId, date)
+        Attendance attendance = attendanceRepository.findByStudentIdAndDate(studentId, date)
                 .orElse(new Attendance());
 
         attendance.setStudent(student);
         attendance.setDate(date);
         attendance.setStatus(status);
+        attendance.setMethod(Attendance.AttendanceMethod.MANUAL);
         attendance.setMarkedBy(staff);
         if (attendance.getTime() == null && status == Attendance.AttendanceStatus.PRESENT) {
             attendance.setTime(LocalTime.now());
@@ -51,13 +58,10 @@ public class AttendanceService {
 
         Attendance saved = attendanceRepository.save(attendance);
 
-        // Notify parent
-        String emoji = (status == Attendance.AttendanceStatus.PRESENT) ? "✅"
-                : (status == Attendance.AttendanceStatus.LATE ? "⏳" : "❌");
         String statusWord = status.name().toLowerCase();
         notificationService.sendToUser(
                 studentId,
-                emoji + " Attendance — " + date,
+                "Attendance Update - " + date,
                 student.getFullName() + " is " + statusWord + " today.",
                 "ATTENDANCE");
 
@@ -68,13 +72,21 @@ public class AttendanceService {
     public Attendance scanBarcode(String barcode, Long staffId, String batch, String center) {
         Student student = studentRepository.findByBarcode(barcode)
                 .orElseThrow(() -> new RuntimeException("Invalid barcode: Student not found"));
+        if (student.getStatus() != StudentStatus.ACTIVE) {
+            throw new IllegalArgumentException("Student is not active.");
+        }
+        if (student.getUser() != null && !student.getUser().isActive()) {
+            throw new IllegalArgumentException("Student account is inactive.");
+        }
 
         User staff = userRepository.findById(staffId).orElse(null);
         LocalDate today = LocalDate.now();
 
-        Attendance attendance = attendanceRepository.findByStudent_StudentIdAndDate(student.getStudentId(), today)
-                .orElse(new Attendance());
+        if (attendanceRepository.findByStudentIdAndDate(student.getStudentId(), today).isPresent()) {
+            throw new IllegalArgumentException("Attendance already marked for this student today.");
+        }
 
+        Attendance attendance = new Attendance();
         attendance.setStudent(student);
         attendance.setDate(today);
         attendance.setTime(LocalTime.now());
@@ -88,7 +100,7 @@ public class AttendanceService {
 
         notificationService.sendToUser(
                 student.getStudentId(),
-                "✅ Attendance Marked",
+                "Attendance Marked",
                 student.getFullName() + " arrived at " + attendance.getTime(),
                 "ATTENDANCE");
 
@@ -97,17 +109,16 @@ public class AttendanceService {
 
     @Transactional
     public void autoAbsentRemainder(String batch, LocalDate date, Long staffId) {
-        List<Student> students = studentRepository.findAll().stream()
-                .filter(s -> s.getBatchOrClass().equalsIgnoreCase(batch))
-                .toList();
+        LocalDate targetDate = date != null ? date : LocalDate.now();
+        List<Student> students = studentRepository.findByBatchOrClassIgnoreCaseAndStatus(batch, StudentStatus.ACTIVE);
 
         User staff = userRepository.findById(staffId).orElse(null);
 
         for (Student s : students) {
-            if (attendanceRepository.findByStudent_StudentIdAndDate(s.getStudentId(), date).isEmpty()) {
+            if (attendanceRepository.findByStudentIdAndDate(s.getStudentId(), targetDate).isEmpty()) {
                 Attendance abs = new Attendance();
                 abs.setStudent(s);
-                abs.setDate(date);
+                abs.setDate(targetDate);
                 abs.setStatus(Attendance.AttendanceStatus.ABSENT);
                 abs.setMethod(Attendance.AttendanceMethod.MANUAL);
                 abs.setMarkedBy(staff);
@@ -122,7 +133,7 @@ public class AttendanceService {
     }
 
     public List<Attendance> getStudentAttendance(String studentId) {
-        return attendanceRepository.findByStudent_StudentId(studentId);
+        return attendanceRepository.findHistoryByStudentId(studentId);
     }
 
     public List<Attendance> getBatchAttendance(LocalDate start, LocalDate end, Integer batch) {

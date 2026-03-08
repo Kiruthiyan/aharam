@@ -12,7 +12,7 @@ export interface ApiResponse<T> {
 }
 
 const api = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api",
+    baseURL: process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8081/api",
     headers: {
         "Content-Type": "application/json",
     },
@@ -45,20 +45,25 @@ api.interceptors.response.use(
     (error) => {
         // Handle Network Errors
         if (!error.response) {
-            toast.error("Network error! Please check your connection.");
-            return Promise.reject(error);
+            const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8081/api";
+            const message = `Cannot connect to backend (${backendUrl}). Start backend server and try again.`;
+            toast.error(message);
+            return Promise.reject({ message });
         }
 
         const statusCode = error.response.status;
-        const errorData = error.response.data as ApiResponse<any>;
+        const errorData = error.response.data as ApiResponse<unknown>;
         const errorMessage = errorData?.message || "An unexpected error occurred";
 
         // Global Error Handling
         if (statusCode === 401) {
             if (typeof window !== "undefined") {
                 localStorage.removeItem("token");
-                localStorage.removeItem("role");
+                localStorage.removeItem("userRole");
                 localStorage.removeItem("username");
+                localStorage.removeItem("name");
+                localStorage.removeItem("userId");
+                localStorage.removeItem("requirePasswordChange");
                 const isLoginPage = window.location.pathname === "/login";
                 if (!isLoginPage) {
                     toast.error("Session expired. Please log in again.");

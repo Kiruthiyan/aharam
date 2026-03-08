@@ -1,0 +1,32 @@
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/postgres}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+  mail:
+    host: ${SPRING_MAIL_HOST:smtp.gmail.com}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+server:
+  port: ${SERVER_PORT:8081}
+
+app:
+  jwtSecret: ${APP_JWT_SECRET:dev-only-jwt-secret-please-change-before-production-1234567890abcdef}
+  seed:
+    default-admin:
+      enabled: ${APP_SEED_DEFAULT_ADMIN_ENABLED:false}
+      password: ${APP_SEED_DEFAULT_ADMIN_PASSWORD:}
+    default-staff:
+      enabled: ${APP_SEED_DEFAULT_STAFF_ENABLED:false}
+      password: ${APP_SEED_DEFAULT_STAFF_PASSWORD:}

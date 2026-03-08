@@ -1,20 +1,27 @@
 package com.aharam.tuition.controller;
 
 import com.aharam.tuition.dto.ApiResponse;
+import com.aharam.tuition.dto.ForgotPasswordRequest;
 import com.aharam.tuition.dto.JwtResponse;
 import com.aharam.tuition.dto.LoginRequest;
+import com.aharam.tuition.dto.ResetPasswordRequest;
 import com.aharam.tuition.dto.SignupRequest;
 import com.aharam.tuition.dto.ChangePasswordRequest;
+import com.aharam.tuition.dto.VerifyOtpRequest;
 import com.aharam.tuition.entity.Role;
 import com.aharam.tuition.entity.User;
+import com.aharam.tuition.exception.BusinessException;
 import com.aharam.tuition.repository.UserRepository;
-import com.aharam.tuition.repository.StudentRepository;
 import com.aharam.tuition.security.JwtUtils;
 import com.aharam.tuition.service.EmailService;
+import jakarta.persistence.EntityNotFoundException;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -22,11 +29,10 @@ import org.springframework.web.bind.annotation.*;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
-import java.util.Map;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "*", maxAge = 3600)
 public class AuthController {
 
     @Autowired
@@ -34,9 +40,6 @@ public class AuthController {
 
     @Autowired
     UserRepository userRepository;
-
-    @Autowired
-    StudentRepository studentRepository;
 
     @Autowired
     PasswordEncoder passwordEncoder;
@@ -54,8 +57,11 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest) {
-        User user = userRepository.findByEmail(loginRequest.getUsername()).orElse(null);
+    public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
+        String loginId = loginRequest.getLoginId().trim();
+        User user = userRepository.findByUsername(loginId)
+                .or(() -> userRepository.findByEmail(loginId))
+                .orElse(null);
 
         if (user != null) {
             if (!user.isActive()) {
@@ -65,37 +71,39 @@ public class AuthController {
 
         try {
             Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
+                    new UsernamePasswordAuthenticationToken(loginId, loginRequest.getPassword()));
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
             String jwt = jwtUtils.generateJwtToken(authentication);
 
-            String displayName = user != null ? user.getFullName() : loginRequest.getUsername();
+            String displayName = user != null ? user.getFullName() : loginId;
 
             JwtResponse resp = new JwtResponse(
                     jwt,
                     user != null ? user.getId() : 0L,
-                    user != null ? user.getEmail() : loginRequest.getUsername(),
+                    user != null ? user.getUsername() : loginId,
                     displayName,
                     user != null ? user.getRole().name() : "",
                     user != null ? user.isPasswordChangeRequired() : false);
 
             return ResponseEntity.ok(ApiResponse.success(resp, "Login successful"));
 
-        } catch (Exception e) {
-            return ResponseEntity.status(401).body(ApiResponse.error("Invalid credentials", "AUTH_FAILED"));
+        } catch (AuthenticationException e) {
+            return ResponseEntity.status(401).body(ApiResponse.error("Invalid credentials.", "AUTH_FAILED"));
         }
     }
 
     @PostMapping("/signup")
-    public ResponseEntity<?> registerUser(@RequestBody SignupRequest signUpRequest) {
-        if (userRepository.existsByEmail(signUpRequest.getEmail())) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("Email is already taken!", "EMAIL_EXISTS"));
+    public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signUpRequest) {
+        String email = normalizeEmail(signUpRequest.getEmail());
+        String username = signUpRequest.getUsername().trim();
+        if (userRepository.existsByEmail(email)) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Email is already registered.", "EMAIL_EXISTS"));
         }
 
         User user = new User();
-        user.setFullName(signUpRequest.getUsername());
-        user.setEmail(signUpRequest.getEmail());
+        user.setFullName(username);
+        user.setEmail(email);
         user.setPassword(passwordEncoder.encode(signUpRequest.getPassword()));
 
         String strRole = signUpRequest.getRole();
@@ -113,9 +121,10 @@ public class AuthController {
     }
 
     @PostMapping("/change-password")
-    public ResponseEntity<?> changePassword(@RequestBody ChangePasswordRequest request) {
-        User user = userRepository.findByEmail(request.getUsername())
-                .orElseThrow(() -> new RuntimeException("Error: User not found."));
+    public ResponseEntity<?> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        User user = userRepository.findByUsername(request.getUsername().trim())
+                .or(() -> userRepository.findByEmail(request.getUsername().trim()))
+                .orElseThrow(() -> new EntityNotFoundException("User not found."));
 
         if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
             return ResponseEntity.badRequest().body(ApiResponse.error("Incorrect old password!", "INVALID_PASSWORD"));
@@ -130,12 +139,14 @@ public class AuthController {
 
     // --- FORGOT PASSWORD OTP FLOW ---
     @PostMapping("/forgot-password")
-    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> request) {
-        String email = request.get("email");
-        User user = userRepository.findByEmail(email).orElse(null);
+    public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        String email = normalizeEmail(request.getEmail());
+        User user = userRepository.findByEmail(email)
+                .or(() -> userRepository.findByUsername(request.getEmail().trim()))
+                .orElse(null);
         if (user == null) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("No account found with that email address.", "USER_NOT_FOUND"));
+                    .body(ApiResponse.error("No account found with that email address or login ID.", "USER_NOT_FOUND"));
         }
 
         String otp = generateOtp();
@@ -149,14 +160,16 @@ public class AuthController {
     }
 
     @PostMapping("/verify-otp")
-    public ResponseEntity<?> verifyOtp(@RequestBody Map<String, String> request) {
-        String email = request.get("email");
-        String otp = request.get("otp");
+    public ResponseEntity<?> verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
+        String email = normalizeEmail(request.getEmail());
+        String otp = normalizeOtp(request.getOtp());
 
-        User user = userRepository.findByEmail(email).orElse(null);
+        User user = userRepository.findByEmail(email)
+                .or(() -> userRepository.findByUsername(request.getEmail().trim()))
+                .orElse(null);
         if (user == null) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("No account found with that email address.", "USER_NOT_FOUND"));
+                    .body(ApiResponse.error("No account found with that email address or login ID.", "USER_NOT_FOUND"));
         }
         if (user.getPasswordResetToken() == null || !user.getPasswordResetToken().equals(otp)) {
             return ResponseEntity.badRequest().body(ApiResponse.error("Invalid OTP.", "INVALID_OTP"));
@@ -170,15 +183,17 @@ public class AuthController {
     }
 
     @PostMapping("/reset-password")
-    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> request) {
-        String email = request.get("email");
-        String otp = request.get("otp");
-        String newPassword = request.get("newPassword");
+    public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        String email = normalizeEmail(request.getEmail());
+        String otp = normalizeOtp(request.getOtp());
+        String newPassword = request.getNewPassword();
 
-        User user = userRepository.findByEmail(email).orElse(null);
+        User user = userRepository.findByEmail(email)
+                .or(() -> userRepository.findByUsername(request.getEmail().trim()))
+                .orElse(null);
         if (user == null) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("No account found with that email address.", "USER_NOT_FOUND"));
+                    .body(ApiResponse.error("No account found with that email address or login ID.", "USER_NOT_FOUND"));
         }
         if (user.getPasswordResetToken() == null || !user.getPasswordResetToken().equals(otp)) {
             return ResponseEntity.badRequest().body(ApiResponse.error("Invalid OTP.", "INVALID_OTP"));
@@ -196,5 +211,19 @@ public class AuthController {
 
         return ResponseEntity.ok(
                 ApiResponse.success(null, "Password reset successfully. You can now log in with your new password."));
+    }
+
+    private String normalizeEmail(String value) {
+        if (value == null) {
+            throw new BusinessException("Email is required.", "EMAIL_REQUIRED", HttpStatus.BAD_REQUEST);
+        }
+        return value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeOtp(String value) {
+        if (value == null) {
+            throw new BusinessException("OTP is required.", "INVALID_OTP_FORMAT", HttpStatus.BAD_REQUEST);
+        }
+        return value.trim();
     }
 }

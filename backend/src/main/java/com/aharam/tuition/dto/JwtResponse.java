@@ -8,7 +8,7 @@ import lombok.AllArgsConstructor;
 public class JwtResponse {
     private String token;
     private Long id;
-    private String email;
+    private String username; // Login identity: username, email, or Student ID
     private String displayName; // Student Name or User Full Name
     private String role;
     private boolean requirePasswordChange;

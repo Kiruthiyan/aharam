@@ -2,6 +2,9 @@ package com.aharam.tuition.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -10,6 +13,8 @@ import java.time.LocalDateTime;
 @Table(name = "attendance", uniqueConstraints = {
         @UniqueConstraint(columnNames = { "student_id", "date" })
 })
+@SQLDelete(sql = "UPDATE attendance SET deleted_at = CURRENT_TIMESTAMP WHERE id=?")
+@SQLRestriction("deleted_at IS NULL")
 public class Attendance {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

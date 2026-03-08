@@ -1,10 +1,18 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-noto-sans-tamil);
+  --font-sans: var(--font-app);
   --color-primary: #059669;
   --color-primary-dark: #047857;
   --color-secondary: #10b981;
+}
+
+:root {
+  --font-app: var(--font-english), "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+html[data-lang="ta"] {
+  --font-app: var(--font-tamil), "Noto Sans Tamil", "Latha", sans-serif;
 }
 
 /* Custom Utilities if needed */
@@ -49,7 +57,9 @@ main,
 }
 
 body {
-  font-family: var(--font-noto-sans-tamil), sans-serif;
+  font-family: var(--font-app);
+  line-height: 1.6;
+  letter-spacing: 0.01em;
   background-color: #f8fafc;
   /* slate-50 */
 }

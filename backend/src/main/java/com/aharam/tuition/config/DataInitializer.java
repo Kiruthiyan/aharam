@@ -4,13 +4,14 @@ import com.aharam.tuition.entity.Role;
 import com.aharam.tuition.entity.User;
 import com.aharam.tuition.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-
-import java.util.Optional;
+import org.springframework.context.annotation.Profile;
 
 @Component
+@Profile("dev")
 public class DataInitializer implements CommandLineRunner {
 
     @Autowired
@@ -19,46 +20,79 @@ public class DataInitializer implements CommandLineRunner {
     @Autowired
     PasswordEncoder passwordEncoder;
 
+    @Value("${app.seed.default-admin.enabled:false}")
+    private boolean defaultAdminEnabled;
+
+    @Value("${app.seed.default-admin.name:}")
+    private String defaultAdminName;
+
+    @Value("${app.seed.default-admin.email:}")
+    private String defaultAdminEmail;
+
+    @Value("${app.seed.default-admin.password:}")
+    private String defaultAdminPassword;
+
+    @Value("${app.seed.default-staff.enabled:false}")
+    private boolean defaultStaffEnabled;
+
+    @Value("${app.seed.default-staff.name:}")
+    private String defaultStaffName;
+
+    @Value("${app.seed.default-staff.email:}")
+    private String defaultStaffEmail;
+
+    @Value("${app.seed.default-staff.password:}")
+    private String defaultStaffPassword;
+
     @Override
     public void run(String... args) throws Exception {
-        System.out.println("Initializing Data...");
-
-        // CLEANUP: Remove old conflicting accounts
-        String[] oldUsers = { "aharam", "aharam_admin", "admin_user", "admin1", "admin2", "admin" };
-        for (String oldUser : oldUsers) {
-            Optional<User> user = userRepository.findByEmail(oldUser + "@aharam.com");
-            if (user.isPresent()) {
-                userRepository.delete(user.get());
-                System.out.println("Removed legacy user: " + oldUser);
-            }
+        if (!defaultAdminEnabled && !defaultStaffEnabled) {
+            System.out.println("Data initialization skipped (all seed users disabled).");
+            return;
         }
 
-        // ==========================================
-        // Create MAIN ADMIN (admin@aharam.com / 12345678)
-        // ==========================================
-        User admin = userRepository.findByEmail("admin@aharam.com").orElse(new User());
-        admin.setFullName("Super Admin");
-        admin.setEmail("admin@aharam.com");
-        admin.setPassword(passwordEncoder.encode("12345678"));
-        admin.setRole(Role.SUPER_ADMIN);
-        admin.setActive(true);
-        admin.setPasswordChangeRequired(false);
-        userRepository.save(admin);
-        System.out.println("Created Main Admin: 'admin@aharam.com' with password '12345678'");
+        if (defaultAdminEnabled) {
+            seedUser(
+                    defaultAdminName,
+                    defaultAdminEmail,
+                    defaultAdminPassword,
+                    Role.SUPER_ADMIN,
+                    "default super admin");
+        } else {
+            System.out.println("Default super admin seed skipped (disabled).");
+        }
 
-        // ==========================================
-        // Create STAFF ACCOUNT (kiruthiyan7@gmail.com / 12345678)
-        // ==========================================
-        User personalAdmin = userRepository.findByEmail("kiruthiyan7@gmail.com").orElse(new User());
-        personalAdmin.setFullName("Kiruthiyan");
-        personalAdmin.setEmail("kiruthiyan7@gmail.com");
-        personalAdmin.setPassword(passwordEncoder.encode("12345678"));
-        personalAdmin.setRole(Role.STAFF);
-        personalAdmin.setActive(true);
-        personalAdmin.setPasswordChangeRequired(false);
-        userRepository.save(personalAdmin);
-        System.out.println("Created Staff Account: 'kiruthiyan7@gmail.com' with password '12345678'");
+        if (defaultStaffEnabled) {
+            seedUser(
+                    defaultStaffName,
+                    defaultStaffEmail,
+                    defaultStaffPassword,
+                    Role.STAFF,
+                    "default staff");
+        } else {
+            System.out.println("Default staff seed skipped (disabled).");
+        }
+    }
 
-        System.out.println("Data Initialization Complete.");
+    private void seedUser(String fullName, String email, String password, Role role, String label) {
+        if (email == null || email.isBlank() || password == null || password.isBlank()) {
+            System.out.println("Seed skipped for " + label + " (missing credentials).");
+            return;
+        }
+
+        User user = userRepository.findByEmail(email).orElse(new User());
+        user.setUsername(email.split("@")[0]);
+        user.setFullName(fullName == null || fullName.isBlank() ? defaultNameForRole(role) : fullName);
+        user.setEmail(email);
+        user.setPassword(passwordEncoder.encode(password));
+        user.setRole(role);
+        user.setActive(true);
+        user.setPasswordChangeRequired(true);
+        userRepository.save(user);
+        System.out.println("Initialized " + label + " account: " + email);
+    }
+
+    private String defaultNameForRole(Role role) {
+        return role == Role.SUPER_ADMIN ? "Super Admin" : "Staff User";
     }
 }

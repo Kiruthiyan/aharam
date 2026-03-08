@@ -9,4 +9,6 @@ import java.util.List;
 @Repository
 public interface NotificationLogRepository extends JpaRepository<NotificationLog, Long> {
     List<NotificationLog> findByStatus(String status);
+
+    List<NotificationLog> findTop5ByOrderByTriggeredAtDesc();
 }

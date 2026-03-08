@@ -1,13 +1,26 @@
 package com.aharam.tuition.service;
 
-import com.aharam.tuition.entity.*;
-import com.aharam.tuition.repository.*;
+import com.aharam.tuition.entity.Exam;
+import com.aharam.tuition.entity.GradeRule;
+import com.aharam.tuition.entity.Mark;
+import com.aharam.tuition.entity.Student;
+import com.aharam.tuition.entity.StudentStatus;
+import com.aharam.tuition.entity.User;
+import com.aharam.tuition.repository.ExamRepository;
+import com.aharam.tuition.repository.GradeRuleRepository;
+import com.aharam.tuition.repository.MarkRepository;
+import com.aharam.tuition.repository.StudentRepository;
+import com.aharam.tuition.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.*;
+import java.util.Collections;
+import java.util.DoubleSummaryStatistics;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,10 +44,19 @@ public class MarkService {
     @Autowired
     private NotificationService notificationService;
 
-    // --- Exam Management ---
-
     public Exam createExam(Exam exam, Long creatorId) {
         User creator = userRepository.findById(creatorId).orElse(null);
+
+        boolean duplicateExists = examRepository
+                .findBySubjectAndBatchAndStatusNot(exam.getSubject(), exam.getBatch(), Exam.ExamStatus.ARCHIVED)
+                .stream()
+                .anyMatch(existing -> Objects.equals(existing.getName(), exam.getName())
+                        && Objects.equals(existing.getExamDate(), exam.getExamDate()));
+
+        if (duplicateExists) {
+            throw new IllegalArgumentException("An active exam with the same name, batch, subject, and date already exists.");
+        }
+
         exam.setCreatedBy(creator);
         return examRepository.save(exam);
     }
@@ -43,19 +65,25 @@ public class MarkService {
         return examRepository.findByBatchAndStatusNot(batch, Exam.ExamStatus.ARCHIVED);
     }
 
-    // --- Marks Entry ---
-
     @Transactional
     public Mark saveMark(Long examId, String studentId, Double score, String remarks, Long staffId) {
         Exam exam = examRepository.findById(examId)
                 .orElseThrow(() -> new RuntimeException("Exam not found"));
         Student student = studentRepository.findById(studentId)
                 .orElseThrow(() -> new RuntimeException("Student not found"));
+        if (student.getStatus() != StudentStatus.ACTIVE) {
+            throw new IllegalArgumentException("Cannot enter marks for inactive student.");
+        }
+        if (!String.valueOf(student.getExamBatch()).equals(exam.getBatch())) {
+            throw new IllegalArgumentException("Student does not belong to the selected exam batch.");
+        }
+        if (score == null || score < 0 || score > exam.getMaxMarks()) {
+            throw new IllegalArgumentException("Score must be between 0 and " + exam.getMaxMarks() + ".");
+        }
+
         User staff = userRepository.findById(staffId).orElse(null);
 
-        Mark mark = markRepository.findByExam_IdAndDeletedAtIsNull(examId).stream()
-                .filter(m -> m.getStudent().getStudentId().equals(studentId))
-                .findFirst()
+        Mark mark = markRepository.findByExam_IdAndStudent_StudentIdAndDeletedAtIsNull(examId, studentId)
                 .orElse(new Mark());
 
         mark.setExam(exam);
@@ -67,11 +95,10 @@ public class MarkService {
 
         Mark saved = markRepository.save(mark);
 
-        // Notify student/parent
         notificationService.sendToUser(
                 studentId,
-                "📊 Result Published: " + exam.getName(),
-                "Your result for " + exam.getSubject() + " is out. Grade: " + saved.getGrade(),
+                "Result Published: " + exam.getName(),
+                "Your result for " + exam.getSubject() + " is available. Grade: " + saved.getGrade(),
                 "ACADEMICS");
 
         return saved;
@@ -82,14 +109,18 @@ public class MarkService {
         List<GradeRule> rules = gradeRuleRepository.findAll();
 
         if (rules.isEmpty()) {
-            if (percentage >= 90)
+            if (percentage >= 90) {
                 return "A";
-            if (percentage >= 75)
+            }
+            if (percentage >= 75) {
                 return "B";
-            if (percentage >= 65)
+            }
+            if (percentage >= 65) {
                 return "C";
-            if (percentage >= 50)
+            }
+            if (percentage >= 50) {
                 return "S";
+            }
             return "F";
         }
 
@@ -110,18 +141,17 @@ public class MarkService {
         }).collect(Collectors.toList());
     }
 
-    // --- Analytics ---
-
     public Map<String, Object> getSubjectAnalytics(Long examId) {
         List<Mark> marks = markRepository.findByExam_IdAndDeletedAtIsNull(examId);
-        if (marks.isEmpty())
+        if (marks.isEmpty()) {
             return Collections.emptyMap();
+        }
 
         DoubleSummaryStatistics stats = marks.stream()
                 .mapToDouble(Mark::getMarksObtained)
                 .summaryStatistics();
 
-        long passCount = marks.stream().filter(m -> !m.getGrade().equals("F")).count();
+        long passCount = marks.stream().filter(m -> !"F".equals(m.getGrade())).count();
 
         Map<String, Long> gradeDist = marks.stream()
                 .collect(Collectors.groupingBy(Mark::getGrade, Collectors.counting()));
@@ -136,9 +166,7 @@ public class MarkService {
         return response;
     }
 
-    // --- List Views ---
-
     public List<Mark> getStudentResults(String studentId) {
-        return markRepository.findByStudent_StudentIdAndDeletedAtIsNull(studentId);
+        return markRepository.findHistoryByStudentId(studentId);
     }
 }

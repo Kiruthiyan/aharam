@@ -1,0 +1,29 @@
+spring:
+  config:
+    activate:
+      on-profile: test
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/aharam_test}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:2525}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+  jpa:
+    show-sql: false
+
+server:
+  port: 0
+
+app:
+  jwtSecret: ${APP_JWT_SECRET:test-only-jwt-secret-for-hs512-please-do-not-use-in-production-1234567890abcdef}
+  seed:
+    default-admin:
+      enabled: false
+    default-staff:
+      enabled: false
+
+notification:
+  provider: mock

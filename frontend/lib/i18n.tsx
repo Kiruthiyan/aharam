@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 
 type Lang = "en" | "ta";
 
@@ -64,17 +64,17 @@ const translations = {
 
         // Login
         loginTitle: "Sign in to your account",
-        loginSubtitle: "Staff: Use Email. Students: Use your Student ID (Index No).",
-        loginUsernameLabel: "Email Address / Student ID",
+        loginSubtitle: "Enter your Login ID (Email/Username/Student ID) and password.",
+        loginIdLabel: "Login ID",
         loginPasswordLabel: "Password",
         loginRememberMe: "Remember me",
         loginForgotPassword: "Forgot password?",
         loginBackToHome: "Back to Home",
         loginButton: "Sign In",
         loginLoading: "Signing in...",
-        loginUsernamePlaceholder: "e.g., KT2026001",
-        loginPasswordPlaceholder: "Students: Use your full name (lowercase)",
-        loginErrorInvalid: "Invalid email/ID or password.",
+        loginIdPlaceholder: "e.g., AHC-1001 or your email",
+        loginPasswordPlaceholder: "Enter your password",
+        loginErrorInvalid: "Invalid login ID or password.",
         loginErrorServer: "Server error. Please try again.",
         loginErrorNetwork: "Network error. Please check your connection.",
 
@@ -151,17 +151,17 @@ const translations = {
 
         // Login
         loginTitle: "கணக்கில் உள்நுழைவு",
-        loginSubtitle: "ஆசிரியர்கள்: மின்னஞ்சல். மாணவர்கள்: உங்கள் மாணவர் சுட்டெண்.",
-        loginUsernameLabel: "மின்னஞ்சல் / மாணவர் சுட்டெண்",
+        loginSubtitle: "உங்கள் உள்நுழைவு குறியீட்டை (மின்னஞ்சல்/பயனர்பெயர்/மாணவர் சுட்டெண்) மற்றும் கடவுச்சொல்லை உள்ளிடவும்.",
+        loginIdLabel: "உள்நுழைவு குறியீடு",
         loginPasswordLabel: "கடவுச்சொல்",
         loginRememberMe: "என்னை நினைவில் கொள்",
         loginForgotPassword: "கடவுச்சொல்லை மறந்தீர்களா?",
         loginBackToHome: "முகப்புக்கு திரும்ப",
         loginButton: "உள்நுழைய",
         loginLoading: "உள்நுழைகிறது...",
-        loginUsernamePlaceholder: "உ.ம்: KT2026001",
-        loginPasswordPlaceholder: "உங்கள் கடவுச்சொல்லை உள்ளிடவும் (ஆங்கில சிறிய எழுத்துக்கள்)",
-        loginErrorInvalid: "தவறான மின்னஞ்சல்/சுட்டெண் அல்லது கடவுச்சொல்.",
+        loginIdPlaceholder: "உ.ம்: AHC-1001 அல்லது உங்கள் மின்னஞ்சல்",
+        loginPasswordPlaceholder: "உங்கள் கடவுச்சொல்லை உள்ளிடவும்",
+        loginErrorInvalid: "தவறான உள்நுழைவு குறியீடு அல்லது கடவுச்சொல்.",
         loginErrorServer: "சேவையகப் பிழை. பின்னர் முயற்சிக்கவும்.",
         loginErrorNetwork: "இணையத் தொடர்பு பிழை. உங்கள் இணைப்பை சரிபார்க்கவும்.",
 
@@ -196,13 +196,36 @@ const I18nContext = createContext<I18nContextType>({
 });
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-    const [lang, setLang] = useState<Lang>("en");
+    const [lang, setLang] = useState<Lang>(() => {
+        if (typeof window === "undefined") {
+            return "en";
+        }
+        const storedLang = localStorage.getItem("appLang");
+        return storedLang === "ta" ? "ta" : "en";
+    });
+
+    const setLangWithPersistence = useCallback((nextLang: Lang) => {
+        setLang(nextLang);
+        if (typeof window !== "undefined") {
+            localStorage.setItem("appLang", nextLang);
+            document.documentElement.lang = nextLang;
+            document.documentElement.setAttribute("data-lang", nextLang);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (typeof document !== "undefined") {
+            document.documentElement.lang = lang;
+            document.documentElement.setAttribute("data-lang", lang);
+        }
+    }, [lang]);
+
     const t = useCallback(
         (k: TranslationKeys) => translations[lang][k] ?? k,
         [lang]
     );
     return (
-        <I18nContext.Provider value={{ lang, setLang, t }}>
+        <I18nContext.Provider value={{ lang, setLang: setLangWithPersistence, t }}>
             {children}
         </I18nContext.Provider>
     );
